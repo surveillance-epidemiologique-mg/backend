@@ -1,0 +1,30 @@
+model CasEpidemiologique {
+  id           Int  @id @default(autoincrement()) @map("id_cas")
+  patientId    Int  @map("id_patient")
+  maladieId    Int  @map("id_maladie")
+  centreId     Int  @map("id_centre")
+  agentId      Int  @map("id_agent")
+  laboratoryId Int? @map("id_laboratoire")
+
+  diagnosticStatus StatutDiag    @default(Suspect) @map("statut_diagnostic")
+  clinicalOutcome  IssueClinique @default(EnCours) @map("issue_clinique")
+  labResult        String?       @map("resultat_labo")
+
+  diagnosisDate   DateTime  @map("date_diagnostic") @db.Date
+  analysisDate    DateTime? @map("date_analyse")
+  outcomeDate     DateTime? @map("date_issue") @db.Date
+  declarationDate DateTime  @default(now()) @map("date_declaration")
+
+  symptoms String? @map("symptomes")
+  // caseLocation Unsupported("geometry(Point, 4326)")? @map("localisation_cas")
+
+  patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  maladie    Maladie      @relation(fields: [maladieId], references: [id], onDelete: Restrict)
+  centre     CentreSante  @relation(fields: [centreId], references: [id], onDelete: Restrict)
+  agent      Utilisateur  @relation("CasAgent", fields: [agentId], references: [id], onDelete: Restrict)
+  laboratory Utilisateur? @relation("CasLaboratoire", fields: [laboratoryId], references: [id], onDelete: SetNull)
+
+  @@index([diagnosisDate], map: "idx_cas_dates")
+  @@index([diagnosticStatus, clinicalOutcome], map: "idx_cas_diag_issue")
+  @@map("cas_epidemiologiques")
+}

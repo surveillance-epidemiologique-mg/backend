@@ -1,0 +1,12 @@
+model Maladie {
+  id             Int     @id @default(autoincrement()) @map("id_maladie")
+  name           String  @map("nom_maladie") @db.VarChar(100)
+  icd10Code      String? @unique @map("code_icd10") @db.VarChar(20)
+  alertThreshold Int     @default(1) @map("seuil_alerte")
+  description    String? @map("description")
+
+  cas     CasEpidemiologique[]
+  alertes Alerte[]
+
+  @@map("maladies")
+}

@@ -1,0 +1,15 @@
+model Alerte {
+  id                Int          @id @default(autoincrement()) @map("id_alerte")
+  maladieId         Int          @map("id_maladie")
+  zoneId            Int          @map("id_zone")
+  detectionDate     DateTime     @default(now()) @map("date_detection")
+  severityLevel     Gravite      @default(Modere) @map("niveau_gravite")
+  alertStatus       StatutAlerte @default(Active) @map("statut_alerte")
+  detectedCaseCount Int          @map("nombre_cas_detectes")
+  //spatialExtent     Unsupported("geometry(Polygon, 4326)")? @map("emprise_spatiale")
+
+  maladie Maladie            @relation(fields: [maladieId], references: [id], onDelete: Restrict)
+  zone    ZoneAdministrative @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+
+  @@map("alertes")
+}

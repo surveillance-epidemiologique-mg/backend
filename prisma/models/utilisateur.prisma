@@ -1,0 +1,22 @@
+model Utilisateur {
+  id                Int      @id @default(autoincrement()) @map("id_utilisateur")
+  name              String   @map("nom") @db.VarChar(150)
+  email             String   @unique @map("email") @db.VarChar(150)
+  phoneNumber       String?  @map("phone_number") @db.VarChar(30)
+  passwordHash      String   @map("mot_de_passe_hash") @db.VarChar(255)
+  temporaryPassword Boolean  @default(true) @map("mot_de_passe_temporaire")
+  resetToken        String?  @unique @map("token_reinitialisation") @db.VarChar(255)
+  isActive          Boolean  @default(true) @map("is_active")
+  roleId            Int      @map("id_role")
+  centreId          Int?     @map("id_centre")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  role   Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  centre CentreSante? @relation(fields: [centreId], references: [id], onDelete: SetNull)
+
+  casDeclares CasEpidemiologique[] @relation("CasAgent")
+  casAnalyses CasEpidemiologique[] @relation("CasLaboratoire")
+
+  @@map("utilisateurs")
+}

@@ -1,0 +1,17 @@
+model ZoneAdministrative {
+  id       Int      @id @default(autoincrement()) @map("id_zone")
+  name     String   @map("nom_zone") @db.VarChar(100)
+  type     TypeZone @map("type_zone")
+  pcode    String?  @unique @map("code_pcode") @db.VarChar(20)
+  parentId Int?     @map("id_zone_parent")
+  // geometry Unsupported("geometry(MultiPolygon, 4326)")? @map("geometrie")
+
+  parent   ZoneAdministrative?  @relation("ZoneHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children ZoneAdministrative[] @relation("ZoneHierarchy")
+
+  centres  CentreSante[]
+  patients Patient[]
+  alertes  Alerte[]
+
+  @@map("zones_administratives")
+}

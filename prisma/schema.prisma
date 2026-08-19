@@ -1,0 +1,11 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
+  moduleFormat    = "cjs"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  // extensions = [postgis]
+}

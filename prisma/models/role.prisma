@@ -1,0 +1,7 @@
+model Role {
+  id    Int           @id @default(autoincrement()) @map("id_role")
+  name  String        @unique @map("nom_role") @db.VarChar(50)
+  users Utilisateur[]
+
+  @@map("roles")
+}

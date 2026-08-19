@@ -1,0 +1,14 @@
+model Patient {
+  id              Int      @id @default(autoincrement()) @map("id_patient")
+  anonymousCode   String   @unique @map("code_anonyme") @db.VarChar(50)
+  age             Int?     @map("age")
+  gender          String?  @map("sexe") @db.Char(1)
+  residenceZoneId Int?     @map("id_zone_residence")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  residenceZone ZoneAdministrative? @relation(fields: [residenceZoneId], references: [id], onDelete: SetNull)
+
+  cas CasEpidemiologique[]
+
+  @@map("patients")
+}

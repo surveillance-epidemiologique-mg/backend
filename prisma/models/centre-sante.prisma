@@ -1,0 +1,14 @@
+model CentreSante {
+  id     Int        @id @default(autoincrement()) @map("id_centre")
+  name   String     @map("nom_centre") @db.VarChar(150)
+  type   TypeCentre @map("type_centre")
+  zoneId Int        @map("id_zone")
+  // location Unsupported("geometry(Point, 4326)")? @map("localisation")
+
+  zone ZoneAdministrative @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+
+  users Utilisateur[]
+  cas   CasEpidemiologique[]
+
+  @@map("centres_sante")
+}

@@ -1,0 +1,52 @@
+enum TypeZone {
+  Region
+  District
+  Commune
+  Fokontany
+
+  @@map("type_zone_enum")
+}
+
+enum TypeCentre {
+  CSB1
+  CSB2
+  CHRD
+  CHRR
+  CHU
+
+  @@map("type_centre_enum")
+}
+
+enum StatutDiag {
+  Suspect
+  Confirme
+  Invalide
+
+  @@map("statut_diag_enum")
+}
+
+enum IssueClinique {
+  EnCours    @map("En_cours")
+  Gueri
+  Deces
+  PerduDeVue @map("Perdu_de_vue")
+
+  @@map("issue_clinique_enum")
+}
+
+enum Gravite {
+  Faible
+  Modere
+  Eleve
+  Critique
+
+  @@map("gravite_enum")
+}
+
+enum StatutAlerte {
+  Active
+  EnInvestigation @map("En_investigation")
+  Cloturee
+
+  @@map("statut_alerte_enum")
+}
