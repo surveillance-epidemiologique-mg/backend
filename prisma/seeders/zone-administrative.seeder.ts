@@ -1,7 +1,7 @@
-import { PrismaClient } from "../../generated/prisma/client";
+import { Prisma } from "../../generated/prisma/client";
 import { TypeZone } from "../../generated/prisma/enums";
 
-export async function seedZonesAdministratives(prisma: PrismaClient) {
+export async function seedZonesAdministratives(prisma: Prisma.TransactionClient) {
   const region = await prisma.zoneAdministrative.upsert({
     where: { pcode: "MG-T" },
     update: {},

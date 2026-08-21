@@ -1,7 +1,7 @@
-import { PrismaClient } from "../../generated/prisma/client";
+import { Prisma } from "../../generated/prisma/client";
 import { TypeCentre } from "../../generated/prisma/enums";
 
-export async function seedCentresSante(prisma: PrismaClient) {
+export async function seedCentresSante(prisma: Prisma.TransactionClient) {
   const district = await prisma.zoneAdministrative.findUnique({
     where: { pcode: "MG-T1" },
   });

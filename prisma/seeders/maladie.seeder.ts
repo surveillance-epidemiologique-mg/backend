@@ -1,4 +1,4 @@
-import { PrismaClient } from "../../generated/prisma/client";
+import { Prisma } from "../../generated/prisma/client";
 
 const MALADIES = [
   {
@@ -27,16 +27,18 @@ const MALADIES = [
   },
 ];
 
-export async function seedMaladies(prisma: PrismaClient) {
-  for (const maladie of MALADIES) {
-    await prisma.maladie.upsert({
-      where: { icd10Code: maladie.icd10Code },
-      update: {
-        name: maladie.name,
-        alertThreshold: maladie.alertThreshold,
-        description: maladie.description,
-      },
-      create: maladie,
-    });
-  }
+export async function seedMaladies(prisma: Prisma.TransactionClient) {
+  await Promise.all(
+    MALADIES.map((maladie) =>
+      prisma.maladie.upsert({
+        where: { icd10Code: maladie.icd10Code },
+        update: {
+          name: maladie.name,
+          alertThreshold: maladie.alertThreshold,
+          description: maladie.description,
+        },
+        create: maladie,
+      }),
+    ),
+  );
 }

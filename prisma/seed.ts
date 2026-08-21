@@ -18,11 +18,12 @@ async function main() {
   const prisma = new PrismaClient({ adapter });
 
   try {
-    await seedRoles(prisma);
-    await seedMaladies(prisma);
-    await seedZonesAdministratives(prisma);
-    await seedCentresSante(prisma);
-    await seedUtilisateurs(prisma);
+    await prisma.$transaction(async (tx) => {
+      await Promise.all([seedRoles(tx), seedMaladies(tx)]);
+      await seedZonesAdministratives(tx);
+      await seedCentresSante(tx);
+      await seedUtilisateurs(tx);
+    });
 
     console.log("Seeding terminé avec succès.");
   } catch (error) {

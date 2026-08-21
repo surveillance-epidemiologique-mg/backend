@@ -1,4 +1,4 @@
-import { PrismaClient } from "../../generated/prisma/client";
+import { Prisma } from "../../generated/prisma/client";
 
 const ROLES = [
   { name: "Administrateur" },
@@ -6,14 +6,14 @@ const ROLES = [
   { name: "Laboratoire" },
 ];
 
-export async function seedRoles(prisma: PrismaClient) {
-  for (const role of ROLES) {
-    await prisma.role.upsert({
-      where: {
-        name: role.name,
-      },
-      update: {},
-      create: role,
-    });
-  }
+export async function seedRoles(prisma: Prisma.TransactionClient) {
+  await Promise.all(
+    ROLES.map((role) =>
+      prisma.role.upsert({
+        where: { name: role.name },
+        update: {},
+        create: role,
+      }),
+    ),
+  );
 }
