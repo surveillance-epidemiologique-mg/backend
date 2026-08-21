@@ -13,6 +13,7 @@ import { EmailService } from '../email/email.service';
 import { ROLES } from '../../common/constants/roles';
 import type { RoleName } from '../../common/constants/roles';
 import { InviteUserDto } from './dto/invite-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 const INVITABLE_ROLES: readonly RoleName[] = [ROLES.MEDECIN, ROLES.LABORATOIRE];
 
@@ -107,6 +108,70 @@ export class UsersService {
   async listRoles() {
     return this.prisma.role.findMany({
       orderBy: { id: 'asc' },
+    });
+  }
+
+  async updateUser(id: number, dto: UpdateUserDto): Promise<UserSafe> {
+    const existing = await this.prisma.utilisateur.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException('Utilisateur introuvable.');
+    }
+
+    const data: Prisma.UtilisateurUpdateInput = {};
+
+    if (dto.name !== undefined) {
+      data.name = dto.name.trim();
+    }
+    if (dto.phoneNumber !== undefined) {
+      data.phoneNumber = dto.phoneNumber;
+    }
+    if (dto.isActive !== undefined) {
+      data.isActive = dto.isActive;
+    }
+    if (dto.roleId !== undefined) {
+      const role = await this.prisma.role.findUnique({
+        where: { id: dto.roleId },
+      });
+      if (!role) {
+        throw new NotFoundException('Rôle introuvable.');
+      }
+      data.role = { connect: { id: dto.roleId } };
+    }
+    if (dto.centreId !== undefined) {
+      if (dto.centreId === null) {
+        data.centre = { disconnect: true };
+      } else {
+        const centre = await this.prisma.centreSante.findUnique({
+          where: { id: dto.centreId },
+        });
+        if (!centre) {
+          throw new NotFoundException('Centre de santé introuvable.');
+        }
+        data.centre = { connect: { id: dto.centreId } };
+      }
+    }
+
+    return this.prisma.utilisateur.update({
+      where: { id },
+      data,
+      ...userSafeListArgs,
+    });
+  }
+
+  async setUserStatus(id: number, isActive: boolean): Promise<UserSafe> {
+    const existing = await this.prisma.utilisateur.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException('Utilisateur introuvable.');
+    }
+
+    return this.prisma.utilisateur.update({
+      where: { id },
+      data: { isActive },
+      ...userSafeListArgs,
     });
   }
 

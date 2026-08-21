@@ -7,6 +7,8 @@ import configuration from './config/configuration';
 import { PrismaModule } from './core/prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { MaladiesModule } from './modules/maladies/maladies.module';
+import { CentresModule } from './modules/centres/centres.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 
@@ -19,6 +21,8 @@ import { RolesGuard } from './common/guards/roles.guard';
     PrismaModule,
     AuthModule,
     UsersModule,
+    MaladiesModule,
+    CentresModule,
   ],
   controllers: [AppController],
   providers: [
