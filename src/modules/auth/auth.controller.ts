@@ -74,6 +74,19 @@ export class AuthController {
     return { success: true };
   }
 
+  @TempPasswordAllowed()
+  @Post('refresh')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Rafraîchir le jeton d'accès" })
+  async refresh(
+    @Res({ passthrough: true }) res: Response,
+    @CurrentUser('id') userId: number,
+  ) {
+    const result = await this.authService.refresh(userId);
+    this.setAuthCookie(res, result.token);
+    return result;
+  }
+
   private setAuthCookie(res: Response, token: string) {
     const cookieName =
       this.configService.get<string>('JWT_COOKIE_NAME') ?? 'access_token';
