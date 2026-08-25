@@ -6,7 +6,7 @@ import type { Request } from 'express';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
 export interface JwtPayload {
-  sub: number;
+  sub: string;
   id_role: number;
   role: string;
   email: string;
@@ -35,12 +35,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: JwtPayload): AuthenticatedUser {
-    if (!payload?.sub) {
+    const userId = Number(payload?.sub);
+
+    if (!Number.isInteger(userId) || userId <= 0) {
       throw new UnauthorizedException('Jeton invalide.');
     }
 
     return {
-      id: payload.sub,
+      id: userId,
       id_role: payload.id_role,
       role: payload.role,
       email: payload.email,

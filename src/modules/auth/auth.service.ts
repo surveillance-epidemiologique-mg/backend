@@ -88,6 +88,12 @@ export class AuthService {
     return utilisateur;
   }
 
+  async refresh(userId: number): Promise<AuthResult> {
+    const utilisateur = await this.getMe(userId);
+    const token = await this.signToken(utilisateur);
+    return { token, user: utilisateur };
+  }
+
   async changePassword(
     userId: number,
     dto: ChangePasswordDto,
@@ -168,7 +174,7 @@ export class AuthService {
     },
   ): Promise<string> {
     const payload: JwtPayload = {
-      sub: utilisateur.id,
+      sub: String(utilisateur.id),
       id_role: utilisateur.roleId,
       role: utilisateur.role.name,
       email: utilisateur.email,
