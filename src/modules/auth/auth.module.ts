@@ -21,9 +21,10 @@ import { EmailModule } from '../email/email.module';
         },
       }),
     }),
+    EmailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, JwtStrategy, SessionsService],
+  exports: [AuthService, SessionsService],
 })
 export class AuthModule {}

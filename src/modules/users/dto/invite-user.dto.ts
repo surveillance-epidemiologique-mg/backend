@@ -42,6 +42,15 @@ export class InviteUserDto {
   centreId?: number;
 
   @ApiPropertyOptional({
+    description: 'Identifiant de la région (pour les rôles régionaux)',
+    example: 1,
+  })
+  @IsOptional()
+  @IsInt({ message: 'La région doit être un identifiant entier.' })
+  @Min(1)
+  regionId?: number;
+
+  @ApiPropertyOptional({
     description: 'Numéro de téléphone (optionnel)',
     example: '+261340000000',
   })

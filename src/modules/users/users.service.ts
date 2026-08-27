@@ -10,12 +10,11 @@ import * as crypto from 'node:crypto';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { EmailService } from '../email/email.service';
-import { ROLES } from '../../common/constants/roles';
-import type { RoleName } from '../../common/constants/roles';
+import { ActivityLogService } from '../../core/activity-log/activity-log.service';
+import { INVITABLE_ROLES } from '../../common/constants/roles';
+import { TypeZone } from '../../../generated/prisma/enums';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-
-const INVITABLE_ROLES: readonly RoleName[] = [ROLES.MEDECIN, ROLES.LABORATOIRE];
 
 const userSafeListArgs = {
   include: { role: true, centre: true },
@@ -38,9 +37,10 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
-  async invite(dto: InviteUserDto) {
+  async invite(inviterId: number, dto: InviteUserDto) {
     const email = dto.email.toLowerCase().trim();
 
     const existing = await this.prisma.utilisateur.findUnique({
@@ -58,9 +58,11 @@ export class UsersService {
     if (!role) {
       throw new NotFoundException('Rôle introuvable.');
     }
-    if (!INVITABLE_ROLES.includes(role.name as RoleName)) {
+    if (
+      !INVITABLE_ROLES.includes(role.name as (typeof INVITABLE_ROLES)[number])
+    ) {
       throw new BadRequestException(
-        "Seuls les rôles « Médecin » et « Laboratoire » peuvent être créés via l'invitation.",
+        "Ce rôle ne peut pas être créé via l'invitation.",
       );
     }
 
@@ -70,6 +72,15 @@ export class UsersService {
       });
       if (!centre) {
         throw new NotFoundException('Centre de santé introuvable.');
+      }
+    }
+
+    if (dto.regionId) {
+      const region = await this.prisma.zoneAdministrative.findUnique({
+        where: { id: dto.regionId },
+      });
+      if (!region || region.type !== TypeZone.Region) {
+        throw new BadRequestException('Région invalide.');
       }
     }
 
@@ -91,6 +102,7 @@ export class UsersService {
         isActive: true,
         roleId: role.id,
         centreId: dto.centreId,
+        regionId: dto.regionId,
       },
       ...userSafeListArgs,
     });
@@ -106,6 +118,14 @@ export class UsersService {
       activationLink,
     });
 
+    await this.activityLog.log({
+      userId: inviterId,
+      action: 'user.invite',
+      resource: 'user',
+      resourceId: utilisateur.id,
+      detail: `Invitation de ${utilisateur.email} (rôle ${role.name})`,
+    });
+
     return {
       user: utilisateur,
       temporaryPassword,
@@ -119,7 +139,11 @@ export class UsersService {
     });
   }
 
-  async updateUser(id: number, dto: UpdateUserDto): Promise<UserSafe> {
+  async updateUser(
+    actorId: number,
+    id: number,
+    dto: UpdateUserDto,
+  ): Promise<UserSafe> {
     const existing = await this.prisma.utilisateur.findUnique({
       where: { id },
     });
@@ -160,15 +184,42 @@ export class UsersService {
         data.centre = { connect: { id: dto.centreId } };
       }
     }
+    if (dto.regionId !== undefined) {
+      if (dto.regionId === null) {
+        data.region = { disconnect: true };
+      } else {
+        const region = await this.prisma.zoneAdministrative.findUnique({
+          where: { id: dto.regionId },
+        });
+        if (!region || region.type !== TypeZone.Region) {
+          throw new BadRequestException('Région invalide.');
+        }
+        data.region = { connect: { id: dto.regionId } };
+      }
+    }
 
-    return this.prisma.utilisateur.update({
+    const utilisateur = await this.prisma.utilisateur.update({
       where: { id },
       data,
       ...userSafeListArgs,
     });
+
+    await this.activityLog.log({
+      userId: actorId,
+      action: 'user.update',
+      resource: 'user',
+      resourceId: id,
+      detail: `Modification du compte ${utilisateur.email}`,
+    });
+
+    return utilisateur;
   }
 
-  async setUserStatus(id: number, isActive: boolean): Promise<UserSafe> {
+  async setUserStatus(
+    actorId: number,
+    id: number,
+    isActive: boolean,
+  ): Promise<UserSafe> {
     const existing = await this.prisma.utilisateur.findUnique({
       where: { id },
     });
@@ -176,11 +227,21 @@ export class UsersService {
       throw new NotFoundException('Utilisateur introuvable.');
     }
 
-    return this.prisma.utilisateur.update({
+    const utilisateur = await this.prisma.utilisateur.update({
       where: { id },
       data: { isActive },
       ...userSafeListArgs,
     });
+
+    await this.activityLog.log({
+      userId: actorId,
+      action: 'user.status',
+      resource: 'user',
+      resourceId: id,
+      detail: `Compte ${utilisateur.email} ${isActive ? 'activé' : 'désactivé'}`,
+    });
+
+    return utilisateur;
   }
 
   async listCentres() {

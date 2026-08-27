@@ -28,6 +28,11 @@ export class UpdateUserDto {
   centreId?: number | null;
 
   @IsOptional()
+  @IsInt({ message: 'La région doit être un identifiant entier.' })
+  @Min(1)
+  regionId?: number | null;
+
+  @IsOptional()
   @IsBoolean({ message: 'Le statut doit être un booléen.' })
   isActive?: boolean;
 }

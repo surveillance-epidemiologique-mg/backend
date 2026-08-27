@@ -1,0 +1,29 @@
+model Signalement {
+  id             Int               @id @default(autoincrement()) @map("id_signalement")
+  maladieId      Int               @map("id_maladie")
+  regionId       Int               @map("id_region")
+  districtId     Int               @map("id_district")
+  centreId       Int               @map("id_centre")
+  dateSignalement DateTime         @map("date_signalement") @db.Date
+  nbCasSuspects  Int               @default(0) @map("nb_cas_suspects")
+  nbCasConfirmes Int               @default(0) @map("nb_cas_confirmes")
+  nbDeces        Int               @default(0) @map("nb_deces")
+  nbGueris       Int               @default(0) @map("nb_gueris")
+  statut         StatutSignalement @default(Brouillon) @map("statut")
+  createdById    Int               @map("id_createur")
+  decidedById    Int?              @map("id_decision")
+  decidedAt      DateTime?         @map("date_decision")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  maladie  Maladie            @relation(fields: [maladieId], references: [id], onDelete: Restrict)
+  region   ZoneAdministrative @relation("SignalementRegion", fields: [regionId], references: [id], onDelete: Restrict)
+  district ZoneAdministrative @relation("SignalementDistrict", fields: [districtId], references: [id], onDelete: Restrict)
+  centre   CentreSante        @relation(fields: [centreId], references: [id], onDelete: Restrict)
+  createur Utilisateur        @relation("SignalementCreateur", fields: [createdById], references: [id], onDelete: Restrict)
+  decideur Utilisateur?       @relation("SignalementDecideur", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@index([statut], map: "idx_signalement_statut")
+  @@index([centreId], map: "idx_signalement_centre")
+  @@map("signalements")
+}

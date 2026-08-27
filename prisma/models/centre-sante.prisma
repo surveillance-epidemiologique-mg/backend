@@ -5,12 +5,15 @@ model CentreSante {
   zoneId    Int        @map("id_zone")
   latitude  Float?     @map("latitude")
   longitude Float?     @map("longitude")
+  address   String?    @map("adresse")
+  isActive  Boolean    @default(true) @map("is_active")
   // location Unsupported("geometry(Point, 4326)")? @map("localisation")
 
   zone ZoneAdministrative @relation(fields: [zoneId], references: [id], onDelete: Restrict)
 
   users Utilisateur[]
   cas   CasEpidemiologique[]
+  signalements Signalement[]
 
   @@map("centres_sante")
 }
