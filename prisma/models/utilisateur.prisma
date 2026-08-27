@@ -12,6 +12,13 @@ model Utilisateur {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
+  // Réinitialisation de mot de passe (flux "mot de passe oublié")
+  passwordResetCode           String?   @map("code_reinitialisation") @db.VarChar(255)
+  passwordResetCodeExpiresAt  DateTime? @map("code_reinitialisation_expire")
+  passwordResetAttempts       Int       @default(0) @map("tentatives_reinitialisation")
+  passwordResetToken          String?   @map("jeton_reinitialisation") @db.VarChar(255)
+  passwordResetTokenExpiresAt DateTime? @map("jeton_reinitialisation_expire")
+
   role   Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
   centre CentreSante? @relation(fields: [centreId], references: [id], onDelete: SetNull)
 

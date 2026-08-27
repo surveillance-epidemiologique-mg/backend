@@ -1,32 +1,61 @@
 import {
   BadRequestException,
+  HttpException,
+  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'node:crypto';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import type { JwtPayload } from './jwt.strategy';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+
+const SENSITIVE_FIELDS = {
+  passwordHash: true,
+  resetToken: true,
+  passwordResetCode: true,
+  passwordResetCodeExpiresAt: true,
+  passwordResetAttempts: true,
+  passwordResetToken: true,
+  passwordResetTokenExpiresAt: true,
+} as const;
+
+const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+const PASSWORD_RESET_MAX_ATTEMPTS = 5;
 
 const userSafeArgs = {
   include: { role: true, centre: true },
-  omit: { passwordHash: true, resetToken: true },
+  omit: SENSITIVE_FIELDS,
 } as const;
 
 type UserSafe = Prisma.UtilisateurGetPayload<typeof userSafeArgs>;
 
 const userWithPasswordArgs = {
   include: { role: true, centre: true },
+  omit: {
+    resetToken: true,
+    passwordResetCode: true,
+    passwordResetCodeExpiresAt: true,
+    passwordResetAttempts: true,
+    passwordResetToken: true,
+    passwordResetTokenExpiresAt: true,
+  },
 } as const;
 
 const userSafeWithZoneArgs = {
   include: { role: true, centre: { include: { zone: true } } },
-  omit: { passwordHash: true, resetToken: true },
+  omit: SENSITIVE_FIELDS,
 } as const;
 
 type UserSafeWithZone = Prisma.UtilisateurGetPayload<
@@ -44,6 +73,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
 
   async login(dto: LoginDto): Promise<AuthResult> {
@@ -68,9 +98,8 @@ export class AuthService {
 
     const token = await this.signToken(utilisateur);
 
-    const { passwordHash, resetToken, ...user } = utilisateur;
+    const { passwordHash, ...user } = utilisateur;
     void passwordHash;
-    void resetToken;
 
     return { token, user };
   }
@@ -163,6 +192,133 @@ export class AuthService {
 
     const token = await this.signToken(updated);
     return { token, user: updated };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ success: boolean }> {
+    const email = dto.email.toLowerCase().trim();
+    const utilisateur = await this.prisma.utilisateur.findUnique({
+      where: { email },
+    });
+
+    // Réponse identique que le compte existe ou non (anti-énumération)
+    if (utilisateur && utilisateur.isActive) {
+      const code = this.generateNumericCode(6);
+      const codeHash = this.hashValue(code);
+      const expiresAt = new Date(Date.now() + PASSWORD_RESET_CODE_TTL_MS);
+
+      await this.prisma.utilisateur.update({
+        where: { id: utilisateur.id },
+        data: {
+          passwordResetCode: codeHash,
+          passwordResetCodeExpiresAt: expiresAt,
+          passwordResetAttempts: 0,
+        },
+      });
+
+      await this.emailService.sendPasswordResetCode({
+        to: utilisateur.email,
+        name: utilisateur.name,
+        code,
+      });
+    }
+
+    return { success: true };
+  }
+
+  async verifyResetCode(
+    dto: VerifyResetCodeDto,
+  ): Promise<{ resetToken: string }> {
+    const email = dto.email.toLowerCase().trim();
+    const utilisateur = await this.prisma.utilisateur.findUnique({
+      where: { email },
+    });
+
+    if (
+      !utilisateur ||
+      !utilisateur.passwordResetCode ||
+      !utilisateur.passwordResetCodeExpiresAt
+    ) {
+      throw new BadRequestException('Code invalide ou expiré.');
+    }
+
+    if (utilisateur.passwordResetCodeExpiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Code invalide ou expiré.');
+    }
+
+    if (utilisateur.passwordResetAttempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
+      throw new HttpException(
+        'Trop de tentatives. Veuillez demander un nouveau code.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    if (this.hashValue(dto.code) !== utilisateur.passwordResetCode) {
+      await this.prisma.utilisateur.update({
+        where: { id: utilisateur.id },
+        data: { passwordResetAttempts: { increment: 1 } },
+      });
+      throw new BadRequestException('Code invalide.');
+    }
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = this.hashValue(resetToken);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
+
+    await this.prisma.utilisateur.update({
+      where: { id: utilisateur.id },
+      data: {
+        passwordResetCode: null,
+        passwordResetCodeExpiresAt: null,
+        passwordResetAttempts: 0,
+        passwordResetToken: tokenHash,
+        passwordResetTokenExpiresAt: expiresAt,
+      },
+    });
+
+    return { resetToken };
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ success: boolean }> {
+    const tokenHash = this.hashValue(dto.token);
+    const utilisateur = await this.prisma.utilisateur.findFirst({
+      where: { passwordResetToken: tokenHash },
+    });
+
+    if (
+      !utilisateur ||
+      !utilisateur.passwordResetTokenExpiresAt ||
+      utilisateur.passwordResetTokenExpiresAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException(
+        'Lien de réinitialisation invalide ou expiré.',
+      );
+    }
+
+    const newHash = await bcrypt.hash(
+      dto.newPassword,
+      this.configService.get<number>('bcryptRounds') ?? 12,
+    );
+
+    await this.prisma.utilisateur.update({
+      where: { id: utilisateur.id },
+      data: {
+        passwordHash: newHash,
+        passwordResetToken: null,
+        passwordResetTokenExpiresAt: null,
+        temporaryPassword: false,
+      },
+    });
+
+    return { success: true };
+  }
+
+  private generateNumericCode(length: number): string {
+    const max = 10 ** length;
+    return crypto.randomInt(0, max).toString().padStart(length, '0');
+  }
+
+  private hashValue(value: string): string {
+    return crypto.createHash('sha256').update(value).digest('hex');
   }
 
   private async signToken(

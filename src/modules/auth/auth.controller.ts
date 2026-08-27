@@ -6,6 +6,9 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { TempPasswordAllowed } from '../../common/decorators/temp-password-allowed.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -85,6 +88,27 @@ export class AuthController {
     const result = await this.authService.refresh(userId);
     this.setAuthCookie(res, result.token);
     return result;
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Demander un code de réinitialisation par e-mail' })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('verify-reset-code')
+  @ApiOperation({ summary: 'Vérifier le code à 6 chiffres' })
+  verifyResetCode(@Body() dto: VerifyResetCodeDto) {
+    return this.authService.verifyResetCode(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Définir un nouveau mot de passe' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   private setAuthCookie(res: Response, token: string) {

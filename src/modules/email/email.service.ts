@@ -11,6 +11,12 @@ export interface WelcomeMailData {
   activationLink: string;
 }
 
+export interface PasswordResetMailData {
+  to: string;
+  name: string;
+  code: string;
+}
+
 @Injectable()
 export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
@@ -58,6 +64,39 @@ export class EmailService implements OnModuleInit {
     this.logger.log(
       `E-mail de bienvenue (mode ${this.transporter ? 'SMTP' : 'simulation'}) envoyé à ${data.to}`,
     );
+  }
+
+  async sendPasswordResetCode(data: PasswordResetMailData): Promise<void> {
+    const subject = 'Réinitialisation de votre mot de passe';
+    const html = this.renderPasswordResetTemplate(data);
+
+    await this.dispatch({
+      to: data.to,
+      subject,
+      html,
+    });
+
+    this.logger.log(
+      `E-mail de réinitialisation (mode ${this.transporter ? 'SMTP' : 'simulation'}) envoyé à ${data.to}`,
+    );
+  }
+
+  private renderPasswordResetTemplate({
+    name,
+    code,
+  }: PasswordResetMailData): string {
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #0f766e; margin-top: 0;">Réinitialisation de votre mot de passe</h2>
+        <p>Bonjour ${name},</p>
+        <p>Vous avez demandé la réinitialisation de votre mot de passe. Utilisez le code de vérification ci-dessous :</p>
+        <p style="text-align:center; margin: 28px 0;">
+          <span style="font-family: 'Courier New', monospace; font-size: 32px; letter-spacing: 10px; font-weight: bold; color: #0f766e; background:#f3f4f6; padding: 12px 20px; border-radius: 8px; display: inline-block;">${code}</span>
+        </p>
+        <p>Ce code expire dans 10 minutes.</p>
+        <p style="color:#6b7280; font-size: 13px;">Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail.</p>
+      </div>
+    `;
   }
 
   private renderWelcomeTemplate({

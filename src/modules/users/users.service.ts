@@ -19,7 +19,15 @@ const INVITABLE_ROLES: readonly RoleName[] = [ROLES.MEDECIN, ROLES.LABORATOIRE];
 
 const userSafeListArgs = {
   include: { role: true, centre: true },
-  omit: { passwordHash: true, resetToken: true },
+  omit: {
+    passwordHash: true,
+    resetToken: true,
+    passwordResetCode: true,
+    passwordResetCodeExpiresAt: true,
+    passwordResetAttempts: true,
+    passwordResetToken: true,
+    passwordResetTokenExpiresAt: true,
+  },
 } as const;
 
 type UserSafe = Prisma.UtilisateurGetPayload<typeof userSafeListArgs>;
