@@ -1,0 +1,16 @@
+model SessionToken {
+  id        Int       @id @default(autoincrement()) @map("id_session")
+  jti       String    @unique @map("jti") @db.VarChar(100)
+  userId    Int       @map("id_utilisateur")
+  ip        String?   @map("ip") @db.VarChar(45)
+  userAgent String?   @map("user_agent")
+  createdAt DateTime  @default(now()) @map("created_at")
+  expiresAt DateTime  @map("expire_le")
+  revokedAt DateTime? @map("revokee_le")
+  current   Boolean   @default(true) @map("courante")
+
+  utilisateur Utilisateur @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "idx_session_utilisateur")
+  @@map("sessions")
+}

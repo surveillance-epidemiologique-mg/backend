@@ -19,6 +19,11 @@ export class UpdateMaladieDto {
   icd10Code?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  iconName?: string;
+
+  @IsOptional()
   @IsInt({ message: 'Le seuil d’alerte doit être un entier.' })
   @Min(1)
   alertThreshold?: number;

@@ -9,14 +9,27 @@ model Utilisateur {
   isActive          Boolean  @default(true) @map("is_active")
   roleId            Int      @map("id_role")
   centreId          Int?     @map("id_centre")
+  regionId          Int?     @map("id_region")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
-  role   Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  centre CentreSante? @relation(fields: [centreId], references: [id], onDelete: SetNull)
+  role   Role             @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  centre CentreSante?     @relation(fields: [centreId], references: [id], onDelete: SetNull)
+  region ZoneAdministrative? @relation("UtilisateurRegion", fields: [regionId], references: [id], onDelete: SetNull)
 
   casDeclares CasEpidemiologique[] @relation("CasAgent")
   casAnalyses CasEpidemiologique[] @relation("CasLaboratoire")
+
+  signalementsCrees  Signalement[] @relation("SignalementCreateur")
+  signalementsDecides Signalement[] @relation("SignalementDecideur")
+
+  alertesCrees      Alerte[]           @relation("AlerteCreateur")
+  alertesAssignees  Alerte[]           @relation("AlerteAssignee")
+  alertesResolues   Alerte[]           @relation("AlerteResolveur")
+  alertesHistoriques AlerteHistorique[]
+
+  logsActivite ActiviteLog[]
+  sessions     SessionToken[]
 
   @@map("utilisateurs")
 }

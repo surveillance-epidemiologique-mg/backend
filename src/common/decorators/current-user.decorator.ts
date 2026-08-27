@@ -6,6 +6,7 @@ export interface AuthenticatedUser {
   role: string;
   email: string;
   tempPassword: boolean;
+  jti: string;
 }
 
 export const CurrentUser = createParamDecorator(

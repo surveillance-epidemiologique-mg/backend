@@ -6,6 +6,8 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { TempPasswordAllowed } from '../../common/decorators/temp-password-allowed.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -25,8 +27,8 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body() dto: LoginDto,
   ) {
-    const result = await this.authService.login(dto);
-    this.setAuthCookie(res, result.token);
+    const result = await this.authService.login(dto, this.requestMeta(res));
+    this.setAuthCookie(res, result.token, result.expiresIn);
     return result;
   }
 
@@ -37,7 +39,34 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body() dto: ActivateAccountDto,
   ) {
-    const result = await this.authService.activateAccount(dto);
+    const result = await this.authService.activateAccount(
+      dto,
+      this.requestMeta(res),
+    );
+    this.setAuthCookie(res, result.token);
+    return result;
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Demande de réinitialisation du mot de passe' })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @ApiOperation({
+    summary: 'Réinitialisation du mot de passe via le lien reçu',
+  })
+  async resetPassword(
+    @Res({ passthrough: true }) res: Response,
+    @Body() dto: ResetPasswordDto,
+  ) {
+    const result = await this.authService.resetPassword(
+      dto,
+      this.requestMeta(res),
+    );
     this.setAuthCookie(res, result.token);
     return result;
   }
@@ -59,7 +88,11 @@ export class AuthController {
     @CurrentUser('id') userId: number,
     @Body() dto: ChangePasswordDto,
   ) {
-    const result = await this.authService.changePassword(userId, dto);
+    const result = await this.authService.changePassword(
+      userId,
+      dto,
+      this.requestMeta(res),
+    );
     this.setAuthCookie(res, result.token);
     return result;
   }
@@ -67,9 +100,13 @@ export class AuthController {
   @Post('logout')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Déconnexion' })
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Res({ passthrough: true }) res: Response,
+    @CurrentUser('jti') jti: string,
+  ) {
     const cookieName =
       this.configService.get<string>('JWT_COOKIE_NAME') ?? 'access_token';
+    await this.authService.logout(jti);
     res.clearCookie(cookieName, { path: '/' });
     return { success: true };
   }
@@ -82,22 +119,34 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @CurrentUser('id') userId: number,
   ) {
-    const result = await this.authService.refresh(userId);
+    const result = await this.authService.refresh(
+      userId,
+      this.requestMeta(res),
+    );
     this.setAuthCookie(res, result.token);
     return result;
   }
 
-  private setAuthCookie(res: Response, token: string) {
+  private requestMeta(res: Response) {
+    return {
+      ip: res.req.ip ?? null,
+      userAgent: res.req.headers['user-agent'] ?? null,
+    };
+  }
+
+  private setAuthCookie(res: Response, token: string, maxAgeSeconds?: number) {
     const cookieName =
       this.configService.get<string>('JWT_COOKIE_NAME') ?? 'access_token';
-    const maxAgeSeconds =
-      this.configService.get<number>('JWT_EXPIRES_IN') ?? 86400;
+    const maxAge =
+      maxAgeSeconds ??
+      this.configService.get<number>('JWT_EXPIRES_IN') ??
+      86400;
 
     res.cookie(cookieName, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: maxAgeSeconds * 1000,
+      maxAge: maxAge * 1000,
       path: '/',
     });
   }

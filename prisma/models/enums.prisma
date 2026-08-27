@@ -34,19 +34,39 @@ enum IssueClinique {
   @@map("issue_clinique_enum")
 }
 
-enum Gravite {
-  Faible
-  Modere
-  Eleve
-  Critique
-
-  @@map("gravite_enum")
-}
-
 enum StatutAlerte {
   Active
-  EnInvestigation @map("En_investigation")
-  Cloturee
+  EnPriseEnCharge @map("En_prise_en_charge")
+  Resolue
 
   @@map("statut_alerte_enum")
+}
+
+enum NiveauRisque {
+  Normal
+  Surveillance
+  Alerte
+  Critique
+
+  @@map("niveau_risque_enum")
+}
+
+enum ActionHistorique {
+  Creation
+  Detection
+  PriseEnCharge
+  Resolution
+  Reouverture
+  MiseAJour
+
+  @@map("action_historique_enum")
+}
+
+enum StatutSignalement {
+  Brouillon
+  EnAttente
+  Valide
+  Rejete
+
+  @@map("statut_signalement_enum")
 }

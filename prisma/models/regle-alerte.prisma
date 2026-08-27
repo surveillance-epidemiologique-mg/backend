@@ -1,0 +1,29 @@
+model RegleAlerte {
+  id          Int          @id @default(autoincrement()) @map("id_regle")
+  name        String       @map("nom_regle") @db.VarChar(150)
+  description String?      @map("description")
+  maladieId   Int?         @map("id_maladie")
+  zoneId      Int          @map("id_zone")
+  periodDays  Int          @default(7) @map("jours_periode")
+  threshold   Int          @map("seuil")
+  niveau      NiveauRisque @default(Alerte) @map("niveau_risque")
+  active      Boolean      @default(true) @map("active")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  maladie Maladie?            @relation(fields: [maladieId], references: [id], onDelete: SetNull)
+  zone    ZoneAdministrative  @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  alertes Alerte[]
+
+  @@map("regles_alerte")
+}
+
+model DetectionEtat {
+  id              Int      @id @default(autoincrement())
+  lastDetectionAt DateTime @map("date_derniere_detection")
+  casesCount      Int      @default(0) @map("nombre_cas")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("etat_detection")
+}
