@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { Request } from 'express';
+import { PrismaService } from '../../core/prisma/prisma.service';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 
 export interface JwtPayload {
@@ -11,11 +12,15 @@ export interface JwtPayload {
   role: string;
   email: string;
   tempPassword: boolean;
+  jti: string;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    private readonly prisma: PrismaService,
+  ) {
     const cookieName =
       configService.get<string>('JWT_COOKIE_NAME') ?? 'access_token';
 
@@ -34,11 +39,27 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  validate(payload: JwtPayload): AuthenticatedUser {
+  async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
     const userId = Number(payload?.sub);
 
     if (!Number.isInteger(userId) || userId <= 0) {
       throw new UnauthorizedException('Jeton invalide.');
+    }
+
+    // Gestion sécurisée des sessions : le jeton doit correspondre à une
+    // session active et non révoquée.
+    if (payload.jti) {
+      const session = await this.prisma.sessionToken.findUnique({
+        where: { jti: payload.jti },
+      });
+      const sessionOk =
+        !!session &&
+        session.revokedAt === null &&
+        session.expiresAt.getTime() > Date.now();
+
+      if (!sessionOk) {
+        throw new UnauthorizedException('Session expirée ou révoquée.');
+      }
     }
 
     return {
@@ -47,6 +68,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       role: payload.role,
       email: payload.email,
       tempPassword: payload.tempPassword,
+      jti: payload.jti,
     };
   }
 }

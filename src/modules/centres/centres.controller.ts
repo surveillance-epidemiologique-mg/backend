@@ -20,7 +20,6 @@ import { ROLES } from '../../common/constants/roles';
 export class CentresController {
   constructor(private readonly centresService: CentresService) {}
 
-  @Roles(ROLES.ADMINISTRATEUR)
   @Get()
   @ApiOperation({ summary: 'Lister les centres de santé' })
   list() {

@@ -3,5 +3,7 @@ model Role {
   name  String        @unique @map("nom_role") @db.VarChar(50)
   users Utilisateur[]
 
+  permissions RolePermission[]
+
   @@map("roles")
 }

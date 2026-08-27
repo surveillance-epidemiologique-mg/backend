@@ -6,6 +6,10 @@ import { seedMaladies } from "./seeders/maladie.seeder";
 import { seedZonesAdministratives } from "./seeders/zone-administrative.seeder";
 import { seedCentresSante } from "./seeders/centre-sante.seeder";
 import { seedUtilisateurs } from "./seeders/utilisateur.seeder";
+import { seedPatients } from "./seeders/patient.seeder";
+import { seedCasEpidemiologiques } from "./seeders/cas-epidemiologique.seeder";
+import { seedReglesAlerte } from "./seeders/alerte.seeder";
+import { seedSignalements } from "./seeders/signalement.seeder";
 
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -23,6 +27,10 @@ async function main() {
       await seedZonesAdministratives(tx);
       await seedCentresSante(tx);
       await seedUtilisateurs(tx);
+      await seedPatients(tx);
+      await seedCasEpidemiologiques(tx);
+      await seedReglesAlerte(tx);
+      await seedSignalements(tx);
     });
 
     console.log("Seeding terminé avec succès.");

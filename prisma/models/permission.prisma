@@ -1,0 +1,19 @@
+model Permission {
+  id          Int             @id @default(autoincrement()) @map("id_permission")
+  code        String          @unique @map("code") @db.VarChar(100)
+  description String?         @map("description")
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       Int @map("id_role")
+  permissionId Int @map("id_permission")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("roles_permissions")
+}

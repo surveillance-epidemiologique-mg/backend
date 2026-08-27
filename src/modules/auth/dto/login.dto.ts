@@ -1,5 +1,11 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsBoolean,
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({
@@ -16,4 +22,13 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty({ message: 'Le mot de passe est requis.' })
   password!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Si vrai, prolonge la durée de session (« Se souvenir de moi »)',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean({ message: 'rememberMe doit être un booléen.' })
+  rememberMe?: boolean;
 }

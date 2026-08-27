@@ -1,0 +1,14 @@
+model AlerteHistorique {
+  id            Int              @id @default(autoincrement()) @map("id_historique")
+  alerteId      Int              @map("id_alerte")
+  action        ActionHistorique @map("action")
+  detail        String?          @map("detail")
+  utilisateurId Int?             @map("id_utilisateur")
+  date          DateTime         @default(now()) @map("date")
+
+  alerte      Alerte       @relation(fields: [alerteId], references: [id], onDelete: Cascade)
+  utilisateur Utilisateur? @relation(fields: [utilisateurId], references: [id], onDelete: SetNull)
+
+  @@index([alerteId], map: "idx_historique_alerte")
+  @@map("alertes_historique")
+}

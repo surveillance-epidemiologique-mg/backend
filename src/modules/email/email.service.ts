@@ -11,6 +11,12 @@ export interface WelcomeMailData {
   activationLink: string;
 }
 
+export interface ResetPasswordMailData {
+  to: string;
+  name: string;
+  resetLink: string;
+}
+
 @Injectable()
 export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
@@ -60,6 +66,21 @@ export class EmailService implements OnModuleInit {
     );
   }
 
+  async sendPasswordResetEmail(data: ResetPasswordMailData): Promise<void> {
+    const subject = 'Réinitialisation de votre mot de passe';
+    const html = this.renderResetPasswordTemplate(data);
+
+    await this.dispatch({
+      to: data.to,
+      subject,
+      html,
+    });
+
+    this.logger.log(
+      `E-mail de réinitialisation (mode ${this.transporter ? 'SMTP' : 'simulation'}) envoyé à ${data.to}`,
+    );
+  }
+
   private renderWelcomeTemplate({
     to,
     name,
@@ -83,6 +104,28 @@ export class EmailService implements OnModuleInit {
         </p>
         <p style="color:#6b7280; font-size: 13px;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : <br/>${activationLink}</p>
         <p style="color:#6b7280; font-size: 12px;">Ce lien d'activation est à usage unique et expire après utilisation. Merci de ne pas répondre à cet e-mail.</p>
+      </div>
+    `;
+  }
+
+  private renderResetPasswordTemplate({
+    to,
+    name,
+    resetLink,
+  }: ResetPasswordMailData): string {
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #0f766e; margin-top: 0;">Réinitialisation de mot de passe</h2>
+        <p>Bonjour ${name},</p>
+        <p>Une demande de réinitialisation de mot de passe a été effectuée pour votre compte (<strong>${to}</strong>).</p>
+        <p>Cliquez sur le bouton ci-dessous pour définir un nouveau mot de passe :</p>
+        <p style="text-align:center;">
+          <a href="${resetLink}" style="display:inline-block; background:#0f766e; color:#ffffff; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">
+            Réinitialiser mon mot de passe
+          </a>
+        </p>
+        <p style="color:#6b7280; font-size: 13px;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : <br/>${resetLink}</p>
+        <p style="color:#6b7280; font-size: 12px;">Ce lien est à usage unique et expire après utilisation. Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail.</p>
       </div>
     `;
   }

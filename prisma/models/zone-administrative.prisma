@@ -13,5 +13,11 @@ model ZoneAdministrative {
   patients Patient[]
   alertes  Alerte[]
 
+  signalementsRegion   Signalement[] @relation("SignalementRegion")
+  signalementsDistrict Signalement[] @relation("SignalementDistrict")
+
+  reglesAlerte RegleAlerte[]
+  utilisateursRegion Utilisateur[] @relation("UtilisateurRegion")
+
   @@map("zones_administratives")
 }
