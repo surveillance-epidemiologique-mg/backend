@@ -37,7 +37,8 @@ const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
 
 const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
-const MAX_FAILED_ATTEMPTS = 5;
+const ACTIVATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 h
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 h
 
 const userSafeArgs = {
   include: { role: true, centre: true },
@@ -59,8 +60,12 @@ const userWithPasswordArgs = {
 } as const;
 
 const userSafeWithZoneArgs = {
-  include: { role: true, centre: { include: { zone: true } } },
-  omit: SENSITIVE_FIELDS,
+  include: {
+    role: true,
+    centre: { include: { zone: true } },
+    region: true,
+  },
+  omit: { passwordHash: true, resetToken: true },
 } as const;
 
 type UserSafeWithZone = Prisma.UtilisateurGetPayload<
@@ -225,7 +230,7 @@ export class AuthService {
     meta?: RequestMeta,
   ): Promise<AuthResult> {
     const utilisateur = await this.prisma.utilisateur.findUnique({
-      where: { resetToken: dto.token },
+      where: { resetToken: this.hashToken(dto.token) },
       ...userSafeArgs,
     });
 
@@ -233,6 +238,10 @@ export class AuthService {
       throw new BadRequestException(
         "Lien d'activation invalide ou déjà utilisé.",
       );
+    }
+
+    if (this.isTokenExpired(utilisateur.resetTokenExpiresAt)) {
+      throw new BadRequestException("Ce lien d'activation a expiré.");
     }
 
     const newHash = await bcrypt.hash(
@@ -246,6 +255,8 @@ export class AuthService {
         passwordHash: newHash,
         temporaryPassword: false,
         resetToken: null,
+        resetTokenExpiresAt: null,
+        activatedAt: new Date(),
       },
       ...userSafeArgs,
     });
@@ -263,9 +274,59 @@ export class AuthService {
     return { token, user: updated };
   }
 
-  async forgotPassword(
-    dto: ForgotPasswordDto,
-  ): Promise<{ success: boolean; message?: string }> {
+  async activationInfo(token: string): Promise<{ email: string }> {
+    const utilisateur = await this.prisma.utilisateur.findUnique({
+      where: { resetToken: this.hashToken(token) },
+      select: { email: true, resetTokenExpiresAt: true },
+    });
+
+    if (!utilisateur) {
+      throw new BadRequestException(
+        "Lien d'activation invalide ou déjà utilisé.",
+      );
+    }
+    if (this.isTokenExpired(utilisateur.resetTokenExpiresAt)) {
+      throw new BadRequestException("Ce lien d'activation a expiré.");
+    }
+
+    return { email: utilisateur.email };
+  }
+
+  async resendActivation(emailRaw: string): Promise<{ message: string }> {
+    const email = emailRaw.toLowerCase().trim();
+    const utilisateur = await this.prisma.utilisateur.findUnique({
+      where: { email },
+    });
+
+    if (
+      !utilisateur ||
+      !utilisateur.isActive ||
+      utilisateur.activatedAt !== null
+    ) {
+      return {
+        message:
+          'Si un compte en attente d’activation est associé à cette adresse, un nouveau lien vient d’être envoyé.',
+      };
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    await this.prisma.utilisateur.update({
+      where: { id: utilisateur.id },
+      data: {
+        resetToken: this.hashToken(token),
+        resetTokenExpiresAt: new Date(Date.now() + ACTIVATION_TOKEN_TTL_MS),
+      },
+    });
+
+    await this.sendActivationEmail(utilisateur.email, utilisateur.name, token);
+
+    return {
+      message:
+        'Si un compte en attente d’activation est associé à cette adresse, un nouveau lien vient d’être envoyé.',
+    };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
     const email = dto.email.toLowerCase().trim();
     const utilisateur = await this.prisma.utilisateur.findUnique({
       where: { email },
@@ -285,17 +346,16 @@ export class AuthService {
     await this.prisma.utilisateur.update({
       where: { id: utilisateur.id },
       data: {
-        passwordResetCode: codeHash,
-        passwordResetCodeExpiresAt: expiresAt,
-        passwordResetAttempts: 0,
+        resetToken: this.hashToken(resetToken),
+        resetTokenExpiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
       },
     });
 
-    await this.emailService.sendPasswordResetCode({
-      to: utilisateur.email,
-      name: utilisateur.name,
-      code,
-    });
+    await this.sendPasswordResetEmail(
+      utilisateur.email,
+      utilisateur.name,
+      resetToken,
+    );
 
     await this.activityLog.log({
       userId: utilisateur.id,
@@ -312,49 +372,8 @@ export class AuthService {
   ): Promise<{ resetToken: string }> {
     const email = dto.email.toLowerCase().trim();
     const utilisateur = await this.prisma.utilisateur.findUnique({
-      where: { email },
-    });
-
-    if (
-      !utilisateur ||
-      !utilisateur.passwordResetCode ||
-      !utilisateur.passwordResetCodeExpiresAt
-    ) {
-      throw new BadRequestException('Code invalide ou expiré.');
-    }
-
-    if (utilisateur.passwordResetCodeExpiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('Code invalide ou expiré.');
-    }
-
-    if (utilisateur.passwordResetAttempts >= PASSWORD_RESET_MAX_ATTEMPTS) {
-      throw new HttpException(
-        'Trop de tentatives. Veuillez demander un nouveau code.',
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    if (this.hashValue(dto.code) !== utilisateur.passwordResetCode) {
-      await this.prisma.utilisateur.update({
-        where: { id: utilisateur.id },
-        data: { passwordResetAttempts: { increment: 1 } },
-      });
-      throw new BadRequestException('Code invalide.');
-    }
-
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = this.hashValue(resetToken);
-    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
-
-    await this.prisma.utilisateur.update({
-      where: { id: utilisateur.id },
-      data: {
-        passwordResetCode: null,
-        passwordResetCodeExpiresAt: null,
-        passwordResetAttempts: 0,
-        passwordResetToken: tokenHash,
-        passwordResetTokenExpiresAt: expiresAt,
-      },
+      where: { resetToken: this.hashToken(dto.token) },
+      ...userSafeArgs,
     });
 
     return { resetToken };
@@ -376,6 +395,10 @@ export class AuthService {
       );
     }
 
+    if (this.isTokenExpired(utilisateur.resetTokenExpiresAt)) {
+      throw new BadRequestException('Ce lien de réinitialisation a expiré.');
+    }
+
     const newHash = await bcrypt.hash(
       dto.newPassword,
       this.configService.get<number>('bcryptRounds') ?? 12,
@@ -388,6 +411,8 @@ export class AuthService {
         passwordResetToken: null,
         passwordResetTokenExpiresAt: null,
         temporaryPassword: false,
+        resetToken: null,
+        resetTokenExpiresAt: null,
       },
     });
 
@@ -396,9 +421,44 @@ export class AuthService {
       action: 'auth.resetPassword',
       resource: 'auth',
       detail: 'Mot de passe réinitialisé',
+      ip: meta?.ip,
     });
 
-    return { success: true };
+    return { token, user: updated };
+  }
+
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  private isTokenExpired(expiresAt: Date | string | null | undefined): boolean {
+    if (expiresAt === null || expiresAt === undefined) {
+      return false;
+    }
+    const expiryTime = new Date(expiresAt).getTime();
+    return Number.isFinite(expiryTime) && expiryTime < Date.now();
+  }
+
+  private async sendActivationEmail(
+    to: string,
+    name: string,
+    token: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('frontendUrl') ?? 'http://localhost:3000';
+    const activationLink = `${frontendUrl}/activate?token=${token}`;
+    await this.emailService.sendActivationEmail({ to, name, activationLink });
+  }
+
+  private async sendPasswordResetEmail(
+    to: string,
+    name: string,
+    token: string,
+  ): Promise<void> {
+    const frontendUrl =
+      this.configService.get<string>('frontendUrl') ?? 'http://localhost:3000';
+    const resetLink = `${frontendUrl}/reset-password?token=${token}`;
+    await this.emailService.sendPasswordResetEmail({ to, name, resetLink });
   }
 
   async logout(jti: string): Promise<void> {

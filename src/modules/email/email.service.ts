@@ -11,7 +11,13 @@ export interface WelcomeMailData {
   activationLink: string;
 }
 
-export interface PasswordResetMailData {
+export interface ActivationMailData {
+  to: string;
+  name: string;
+  activationLink: string;
+}
+
+export interface ResetPasswordMailData {
   to: string;
   name: string;
   code: string;
@@ -29,6 +35,9 @@ export class EmailService implements OnModuleInit {
 
     if (!host) {
       this.transporter = null;
+      this.logger.warn(
+        'SMTP non configuré (SMTP_HOST vide) : envoi des e-mails en mode SIMULATION — les e-mails sont affichés dans la console du serveur. Configurez SMTP_HOST/SMTP_USER/SMTP_PASS pour un envoi réel.',
+      );
       return;
     }
 
@@ -66,9 +75,20 @@ export class EmailService implements OnModuleInit {
     );
   }
 
-  async sendPasswordResetCode(data: PasswordResetMailData): Promise<void> {
-    const subject = 'Réinitialisation de votre mot de passe';
-    const html = this.renderPasswordResetTemplate(data);
+  async sendActivationEmail(data: ActivationMailData): Promise<void> {
+    const subject = 'Bienvenue sur ÉpiSuivi — Activez votre compte';
+    const html = this.renderActivationTemplate(data);
+
+    await this.dispatch({ to: data.to, subject, html });
+
+    this.logger.log(
+      `E-mail d'activation (mode ${this.transporter ? 'SMTP' : 'simulation'}) envoyé à ${data.to}`,
+    );
+  }
+
+  async sendPasswordResetEmail(data: ResetPasswordMailData): Promise<void> {
+    const subject = 'Réinitialisation de votre mot de passe ÉpiSuivi';
+    const html = this.renderResetPasswordTemplate(data);
 
     await this.dispatch({
       to: data.to,
@@ -81,20 +101,24 @@ export class EmailService implements OnModuleInit {
     );
   }
 
-  private renderPasswordResetTemplate({
+  private renderActivationTemplate({
     name,
-    code,
-  }: PasswordResetMailData): string {
+    activationLink,
+  }: ActivationMailData): string {
     return `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 8px;">
-        <h2 style="color: #0f766e; margin-top: 0;">Réinitialisation de votre mot de passe</h2>
-        <p>Bonjour ${name},</p>
-        <p>Vous avez demandé la réinitialisation de votre mot de passe. Utilisez le code de vérification ci-dessous :</p>
-        <p style="text-align:center; margin: 28px 0;">
-          <span style="font-family: 'Courier New', monospace; font-size: 32px; letter-spacing: 10px; font-weight: bold; color: #0f766e; background:#f3f4f6; padding: 12px 20px; border-radius: 8px; display: inline-block;">${code}</span>
+        <h2 style="color: #2563eb; margin-top: 0;">Bonjour ${name},</h2>
+        <p>Votre compte <strong>ÉpiSuivi</strong> a été créé.</p>
+        <p>Pour accéder à la plateforme, veuillez activer votre compte et créer votre mot de passe en cliquant sur le bouton ci-dessous.</p>
+        <p style="text-align:center;">
+          <a href="${activationLink}" style="display:inline-block; background:#2563eb; color:#ffffff; padding:12px 24px; border-radius:6px; text-decoration:none; font-weight:bold;">
+            Activer mon compte
+          </a>
         </p>
-        <p>Ce code expire dans 10 minutes.</p>
-        <p style="color:#6b7280; font-size: 13px;">Si vous n'êtes pas à l'origine de cette demande, ignorez simplement cet e-mail.</p>
+        <p style="color:#6b7280; font-size: 13px;">Ce lien est temporaire et sécurisé. Il expire sous 24 heures et ne peut être utilisé qu'une seule fois.</p>
+        <p style="color:#6b7280; font-size: 13px;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : <br/>${activationLink}</p>
+        <p style="color:#6b7280; font-size: 12px;">Si vous n'êtes pas à l'origine de cette demande, veuillez ignorer cet e-mail.</p>
+        <p style="color:#6b7280; font-size: 12px;">Cordialement,<br/>Équipe ÉpiSuivi</p>
       </div>
     `;
   }

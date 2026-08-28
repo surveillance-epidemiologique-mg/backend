@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -48,6 +49,16 @@ export class UsersController {
   }
 
   @Roles(ROLES.ADMINISTRATEUR)
+  @Post(':id/resend-invitation')
+  @ApiOperation({ summary: "Renvoyer l'e-mail d'invitation" })
+  resendInvitation(
+    @CurrentUser('id') userId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.usersService.resendInvitation(userId, id);
+  }
+
+  @Roles(ROLES.ADMINISTRATEUR)
   @Patch(':id/status')
   @ApiOperation({ summary: 'Activer ou désactiver un utilisateur' })
   setStatus(
@@ -56,6 +67,16 @@ export class UsersController {
     @Body() dto: SetUserStatusDto,
   ) {
     return this.usersService.setUserStatus(userId, id, dto.isActive);
+  }
+
+  @Roles(ROLES.ADMINISTRATEUR)
+  @Delete(':id')
+  @ApiOperation({ summary: 'Supprimer un utilisateur (sans historique lié)' })
+  remove(
+    @CurrentUser('id') userId: number,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.usersService.remove(userId, id);
   }
 
   @Roles(ROLES.ADMINISTRATEUR)

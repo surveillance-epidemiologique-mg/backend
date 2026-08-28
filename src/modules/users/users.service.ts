@@ -84,22 +84,27 @@ export class UsersService {
       }
     }
 
-    const temporaryPassword = this.generateTemporaryPassword(12);
+    const activationToken = crypto.randomBytes(32).toString('hex');
+    const throwawayPassword = crypto.randomBytes(16).toString('base64url');
     const passwordHash = await bcrypt.hash(
-      temporaryPassword,
+      throwawayPassword,
       this.configService.get<number>('bcryptRounds') ?? 12,
     );
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = this.hashToken(activationToken);
+    const tokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const utilisateur = await this.prisma.utilisateur.create({
       data: {
-        name: dto.name.trim(),
+        name: this.composeName(dto),
+        firstName: dto.firstName ?? null,
+        lastName: dto.lastName ?? null,
         email,
         phoneNumber: dto.phoneNumber,
         passwordHash,
         temporaryPassword: true,
-        resetToken,
-        isActive: true,
+        resetToken: resetTokenHash,
+        resetTokenExpiresAt: tokenExpiresAt,
+        isActive: dto.isActive ?? true,
         roleId: role.id,
         centreId: dto.centreId,
         regionId: dto.regionId,
@@ -109,12 +114,11 @@ export class UsersService {
 
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
-    const activationLink = `${frontendUrl}/activate?token=${resetToken}`;
+    const activationLink = `${frontendUrl}/activate?token=${activationToken}`;
 
-    await this.emailService.sendWelcomeEmail({
+    await this.emailService.sendActivationEmail({
       to: utilisateur.email,
       name: utilisateur.name,
-      tempPassword: temporaryPassword,
       activationLink,
     });
 
@@ -128,9 +132,59 @@ export class UsersService {
 
     return {
       user: utilisateur,
-      temporaryPassword,
       activationLink,
     };
+  }
+
+  async resendInvitation(
+    actorId: number,
+    id: number,
+  ): Promise<{ message: string; activationLink: string }> {
+    const utilisateur = await this.prisma.utilisateur.findUnique({
+      where: { id },
+    });
+    if (!utilisateur) {
+      throw new NotFoundException('Utilisateur introuvable.');
+    }
+    if (!utilisateur.isActive) {
+      throw new ConflictException(
+        'Impossible de renvoyer une invitation sur un compte désactivé.',
+      );
+    }
+    if (utilisateur.activatedAt !== null) {
+      throw new ConflictException(
+        'Ce compte a déjà été activé : aucun lien à renvoyer.',
+      );
+    }
+
+    const activationToken = crypto.randomBytes(32).toString('hex');
+    await this.prisma.utilisateur.update({
+      where: { id },
+      data: {
+        resetToken: this.hashToken(activationToken),
+        resetTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+    const activationLink = `${frontendUrl}/activate?token=${activationToken}`;
+
+    await this.emailService.sendActivationEmail({
+      to: utilisateur.email,
+      name: utilisateur.name,
+      activationLink,
+    });
+
+    await this.activityLog.log({
+      userId: actorId,
+      action: 'user.resendInvitation',
+      resource: 'user',
+      resourceId: id,
+      detail: `Renvoyer l'invitation à ${utilisateur.email}`,
+    });
+
+    return { message: 'Invitation renvoyée.', activationLink };
   }
 
   async listRoles() {
@@ -155,6 +209,15 @@ export class UsersService {
 
     if (dto.name !== undefined) {
       data.name = dto.name.trim();
+    }
+    if (dto.firstName !== undefined || dto.lastName !== undefined) {
+      data.firstName = dto.firstName ?? existing.firstName;
+      data.lastName = dto.lastName ?? existing.lastName;
+      const firstName = data.firstName ?? existing.firstName;
+      const lastName = data.lastName ?? existing.lastName;
+      if (firstName || lastName) {
+        data.name = [firstName, lastName].filter(Boolean).join(' ');
+      }
     }
     if (dto.phoneNumber !== undefined) {
       data.phoneNumber = dto.phoneNumber;
@@ -244,6 +307,66 @@ export class UsersService {
     return utilisateur;
   }
 
+  async remove(actorId: number, id: number): Promise<{ message: string }> {
+    if (id === actorId) {
+      throw new BadRequestException(
+        'Vous ne pouvez pas supprimer votre propre compte.',
+      );
+    }
+
+    const existing = await this.prisma.utilisateur.findUnique({
+      where: { id },
+    });
+    if (!existing) {
+      throw new NotFoundException('Utilisateur introuvable.');
+    }
+
+    const [
+      casDeclares,
+      signalementsCrees,
+      signalementsDecides,
+      alertesCrees,
+      alertesAssignees,
+      alertesResolues,
+    ] = await Promise.all([
+      this.prisma.casEpidemiologique.count({
+        where: { agentId: id },
+      }),
+      this.prisma.signalement.count({ where: { createdById: id } }),
+      this.prisma.signalement.count({ where: { decidedById: id } }),
+      this.prisma.alerte.count({ where: { createdById: id } }),
+      this.prisma.alerte.count({ where: { assigneeId: id } }),
+      this.prisma.alerte.count({ where: { resolvedById: id } }),
+    ]);
+
+    const linked =
+      casDeclares +
+      signalementsCrees +
+      signalementsDecides +
+      alertesCrees +
+      alertesAssignees +
+      alertesResolues;
+
+    if (linked > 0) {
+      throw new ConflictException(
+        `Impossible de supprimer : ${linked} élément(s) de données sont lié(s) à ce compte. Désactivez-le à la place.`,
+      );
+    }
+
+    await this.prisma.sessionToken.deleteMany({ where: { userId: id } });
+    await this.prisma.utilisateur.delete({ where: { id } });
+
+    await this.activityLog.log({
+      userId: actorId,
+      action: 'user.delete',
+      resource: 'user',
+      resourceId: id,
+      detail: `Compte ${existing.email} supprimé`,
+    });
+
+    return { message: 'Utilisateur supprimé.' };
+  }
+
   async listCentres() {
     return this.prisma.centreSante.findMany({
       include: { zone: true },
@@ -258,29 +381,23 @@ export class UsersService {
     });
   }
 
-  private generateTemporaryPassword(length = 12): string {
-    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-    const lower = 'abcdefghijkmnopqrstuvwxyz';
-    const digits = '23456789';
-    const symbols = '!@#$%&*?';
-    const all = upper + lower + digits + symbols;
+  // ---- Helpers ----
 
-    const chars = [
-      upper[crypto.randomInt(upper.length)],
-      lower[crypto.randomInt(lower.length)],
-      digits[crypto.randomInt(digits.length)],
-      symbols[crypto.randomInt(symbols.length)],
-    ];
-
-    for (let i = chars.length; i < length; i++) {
-      chars.push(all[crypto.randomInt(all.length)]);
+  private composeName(dto: {
+    name: string;
+    firstName?: string;
+    lastName?: string;
+  }): string {
+    if (dto.firstName && dto.lastName) {
+      return `${dto.firstName.trim()} ${dto.lastName.trim()}`;
     }
-
-    for (let i = chars.length - 1; i > 0; i--) {
-      const j = crypto.randomInt(i + 1);
-      [chars[i], chars[j]] = [chars[j], chars[i]];
+    if (dto.firstName || dto.lastName) {
+      return (dto.firstName ?? dto.lastName)!.trim();
     }
+    return dto.name.trim();
+  }
 
-    return chars.join('');
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 }
