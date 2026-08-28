@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEmail,
   IsInt,
   IsOptional,
@@ -16,6 +17,16 @@ export class InviteUserDto {
   @IsString()
   @MinLength(2, { message: 'Le nom doit contenir au moins 2 caractères.' })
   name!: string;
+
+  @ApiPropertyOptional({ description: 'Prénom', example: 'Jean' })
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @ApiPropertyOptional({ description: 'Nom de famille', example: 'Rakoto' })
+  @IsOptional()
+  @IsString()
+  lastName?: string;
 
   @ApiProperty({
     description: 'Adresse e-mail de l’utilisateur invité',
@@ -57,4 +68,12 @@ export class InviteUserDto {
   @IsOptional()
   @IsString()
   phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    description: 'Statut du compte (actif/inactif)',
+    default: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

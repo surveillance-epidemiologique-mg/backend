@@ -9,6 +9,7 @@ export interface CarteQuery {
   maladieId?: number;
   regionId?: number;
   districtId?: number;
+  centreId?: number;
   from?: string;
   to?: string;
   typeEtablissement?: string;
@@ -151,6 +152,8 @@ export class CarteService {
       conds.push(Prisma.sql`ct.id_zone = ${query.districtId}`);
     } else if (query.regionId !== undefined) {
       conds.push(Prisma.sql`zp.id_zone = ${query.regionId}`);
+    } else if (query.centreId !== undefined) {
+      conds.push(Prisma.sql`c.id_centre = ${query.centreId}`);
     }
     if (from) conds.push(Prisma.sql`c.date_declaration >= ${from}`);
     if (to) conds.push(Prisma.sql`c.date_declaration <= ${to}`);
@@ -210,6 +213,8 @@ export class CarteService {
       conds.push(Prisma.sql`ct.id_zone = ${query.districtId}`);
     } else if (query.regionId !== undefined) {
       conds.push(Prisma.sql`z.id_zone_parent = ${query.regionId}`);
+    } else if (query.centreId !== undefined) {
+      conds.push(Prisma.sql`ct.id_centre = ${query.centreId}`);
     }
     if (query.typeEtablissement) {
       conds.push(Prisma.sql`ct.type_centre = ${query.typeEtablissement}`);

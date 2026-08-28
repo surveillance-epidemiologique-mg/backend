@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
+import { ActivateInfoDto } from './dto/activate-info.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from '../../common/decorators/public.decorator';
@@ -45,6 +46,24 @@ export class AuthController {
     );
     this.setAuthCookie(res, result.token);
     return result;
+  }
+
+  @Public()
+  @Post('activate-info')
+  @ApiOperation({
+    summary: "Vérifier un jeton d'activation et retourner l'adresse du compte",
+  })
+  activateInfo(@Body() dto: ActivateInfoDto) {
+    return this.authService.activationInfo(dto.token);
+  }
+
+  @Public()
+  @Post('resend-activation')
+  @ApiOperation({
+    summary: "Renvoyer un lien d'activation pour un compte en attente",
+  })
+  resendActivation(@Body() dto: ForgotPasswordDto) {
+    return this.authService.resendActivation(dto.email);
   }
 
   @Public()
