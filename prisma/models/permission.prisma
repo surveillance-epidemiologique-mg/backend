@@ -1,7 +1,7 @@
 model Permission {
-  id          Int             @id @default(autoincrement()) @map("id_permission")
-  code        String          @unique @map("code") @db.VarChar(100)
-  description String?         @map("description")
+  id          Int              @id @default(autoincrement()) @map("id_permission")
+  code        String           @unique @map("code") @db.VarChar(100)
+  description String?          @map("description")
   roles       RolePermission[]
 
   @@map("permissions")

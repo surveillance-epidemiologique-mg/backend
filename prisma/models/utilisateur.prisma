@@ -20,18 +20,19 @@ model Utilisateur {
   passwordResetToken          String?   @map("jeton_reinitialisation") @db.VarChar(255)
   passwordResetTokenExpiresAt DateTime? @map("jeton_reinitialisation_expire")
 
-  role   Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  centre CentreSante? @relation(fields: [centreId], references: [id], onDelete: SetNull)
+  role   Role                @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  centre CentreSante?        @relation(fields: [centreId], references: [id], onDelete: SetNull)
+  region ZoneAdministrative? @relation("UtilisateurRegion", fields: [regionId], references: [id], onDelete: SetNull)
 
   casDeclares CasEpidemiologique[] @relation("CasAgent")
   casAnalyses CasEpidemiologique[] @relation("CasLaboratoire")
 
-  signalementsCrees  Signalement[] @relation("SignalementCreateur")
+  signalementsCrees   Signalement[] @relation("SignalementCreateur")
   signalementsDecides Signalement[] @relation("SignalementDecideur")
 
-  alertesCrees      Alerte[]           @relation("AlerteCreateur")
-  alertesAssignees  Alerte[]           @relation("AlerteAssignee")
-  alertesResolues   Alerte[]           @relation("AlerteResolveur")
+  alertesCrees       Alerte[]           @relation("AlerteCreateur")
+  alertesAssignees   Alerte[]           @relation("AlerteAssignee")
+  alertesResolues    Alerte[]           @relation("AlerteResolveur")
   alertesHistoriques AlerteHistorique[]
 
   logsActivite ActiviteLog[]

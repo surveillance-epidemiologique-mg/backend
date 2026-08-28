@@ -16,7 +16,7 @@ model ZoneAdministrative {
   signalementsRegion   Signalement[] @relation("SignalementRegion")
   signalementsDistrict Signalement[] @relation("SignalementDistrict")
 
-  reglesAlerte RegleAlerte[]
+  reglesAlerte       RegleAlerte[]
   utilisateursRegion Utilisateur[] @relation("UtilisateurRegion")
 
   @@map("zones_administratives")

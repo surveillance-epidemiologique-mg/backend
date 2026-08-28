@@ -11,8 +11,8 @@ model RegleAlerte {
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  maladie Maladie?            @relation(fields: [maladieId], references: [id], onDelete: SetNull)
-  zone    ZoneAdministrative  @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  maladie Maladie?           @relation(fields: [maladieId], references: [id], onDelete: SetNull)
+  zone    ZoneAdministrative @relation(fields: [zoneId], references: [id], onDelete: Restrict)
   alertes Alerte[]
 
   @@map("regles_alerte")

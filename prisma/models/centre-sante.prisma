@@ -11,8 +11,8 @@ model CentreSante {
 
   zone ZoneAdministrative @relation(fields: [zoneId], references: [id], onDelete: Restrict)
 
-  users Utilisateur[]
-  cas   CasEpidemiologique[]
+  users        Utilisateur[]
+  cas          CasEpidemiologique[]
   signalements Signalement[]
 
   @@map("centres_sante")

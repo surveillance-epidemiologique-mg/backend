@@ -3,6 +3,7 @@ import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import type { RequestMeta } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ActivateAccountDto } from './dto/activate-account.dto';
@@ -41,30 +42,6 @@ export class AuthController {
     @Body() dto: ActivateAccountDto,
   ) {
     const result = await this.authService.activateAccount(
-      dto,
-      this.requestMeta(res),
-    );
-    this.setAuthCookie(res, result.token);
-    return result;
-  }
-
-  @Public()
-  @Post('forgot-password')
-  @ApiOperation({ summary: 'Demande de réinitialisation du mot de passe' })
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
-  }
-
-  @Public()
-  @Post('reset-password')
-  @ApiOperation({
-    summary: 'Réinitialisation du mot de passe via le lien reçu',
-  })
-  async resetPassword(
-    @Res({ passthrough: true }) res: Response,
-    @Body() dto: ResetPasswordDto,
-  ) {
-    const result = await this.authService.resetPassword(
       dto,
       this.requestMeta(res),
     );
@@ -149,19 +126,25 @@ export class AuthController {
     return this.authService.resetPassword(dto);
   }
 
-  private setAuthCookie(res: Response, token: string) {
+  private requestMeta(res: Response): RequestMeta {
+    const req = res.req;
+    return {
+      ip: req.ip ?? null,
+      userAgent: req.get('user-agent') ?? null,
+    };
+  }
+
+  private setAuthCookie(res: Response, token: string, expiresIn?: number) {
     const cookieName =
       this.configService.get<string>('JWT_COOKIE_NAME') ?? 'access_token';
-    const maxAge =
-      maxAgeSeconds ??
-      this.configService.get<number>('JWT_EXPIRES_IN') ??
-      86400;
+    const maxAgeSeconds =
+      expiresIn ?? this.configService.get<number>('JWT_EXPIRES_IN') ?? 86400;
 
     res.cookie(cookieName, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: maxAge * 1000,
+      maxAge: maxAgeSeconds * 1000,
       path: '/',
     });
   }

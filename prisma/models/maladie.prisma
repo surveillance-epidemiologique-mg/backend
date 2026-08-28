@@ -6,8 +6,8 @@ model Maladie {
   alertThreshold Int     @default(1) @map("seuil_alerte")
   description    String? @map("description")
 
-  cas     CasEpidemiologique[]
-  alertes Alerte[]
+  cas          CasEpidemiologique[]
+  alertes      Alerte[]
   signalements Signalement[]
   reglesAlerte RegleAlerte[]
 

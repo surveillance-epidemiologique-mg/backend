@@ -2,8 +2,6 @@ import {
   BadRequestException,
   HttpException,
   HttpStatus,
-  HttpException,
-  HttpStatus,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -11,10 +9,11 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'node:crypto';
-import * as crypto from 'node:crypto';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { ActivityLogService } from '../../core/activity-log/activity-log.service';
 import { EmailService } from '../email/email.service';
+import { SessionsService } from './sessions.service';
 import type { JwtPayload } from './jwt.strategy';
 import { LoginDto } from './dto/login.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -36,6 +35,9 @@ const SENSITIVE_FIELDS = {
 const PASSWORD_RESET_CODE_TTL_MS = 10 * 60 * 1000;
 const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
 const PASSWORD_RESET_MAX_ATTEMPTS = 5;
+
+const LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+const MAX_FAILED_ATTEMPTS = 5;
 
 const userSafeArgs = {
   include: { role: true, centre: true },
@@ -65,6 +67,11 @@ type UserSafeWithZone = Prisma.UtilisateurGetPayload<
   typeof userSafeWithZoneArgs
 >;
 
+type TokenSubject = Pick<
+  UserSafe,
+  'id' | 'email' | 'roleId' | 'temporaryPassword'
+> & { role: { name: string } };
+
 export interface AuthResult {
   token: string;
   user: UserSafe | UserSafeWithZone;
@@ -86,6 +93,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly sessionsService: SessionsService,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   async login(dto: LoginDto, meta?: RequestMeta): Promise<LoginResult> {
@@ -139,7 +148,7 @@ export class AuthService {
     const { passwordHash, ...user } = utilisateur;
     void passwordHash;
 
-    return { token, user };
+    return { token, user, expiresIn };
   }
 
   async getMe(userId: number): Promise<UserSafeWithZone> {
@@ -254,7 +263,9 @@ export class AuthService {
     return { token, user: updated };
   }
 
-  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+  async forgotPassword(
+    dto: ForgotPasswordDto,
+  ): Promise<{ success: boolean; message?: string }> {
     const email = dto.email.toLowerCase().trim();
     const utilisateur = await this.prisma.utilisateur.findUnique({
       where: { email },
@@ -262,26 +273,28 @@ export class AuthService {
 
     if (!utilisateur || !utilisateur.isActive) {
       return {
-        message:
-          'Si un compte est associé à cette adresse e-mail, un lien de réinitialisation vient d’être envoyé.',
+        success: false,
+        message: "Aucun compte n'est associé à cette adresse e-mail.",
       };
     }
 
-    const resetToken = crypto.randomBytes(32).toString('hex');
+    const code = this.generateNumericCode(6);
+    const codeHash = this.hashValue(code);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_CODE_TTL_MS);
 
     await this.prisma.utilisateur.update({
       where: { id: utilisateur.id },
-      data: { resetToken },
+      data: {
+        passwordResetCode: codeHash,
+        passwordResetCodeExpiresAt: expiresAt,
+        passwordResetAttempts: 0,
+      },
     });
 
-    const frontendUrl =
-      this.configService.get<string>('frontendUrl') ?? 'http://localhost:3000';
-    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
-
-    await this.emailService.sendPasswordResetEmail({
+    await this.emailService.sendPasswordResetCode({
       to: utilisateur.email,
       name: utilisateur.name,
-      resetLink,
+      code,
     });
 
     await this.activityLog.log({
@@ -290,83 +303,6 @@ export class AuthService {
       resource: 'auth',
       detail: 'Demande de réinitialisation du mot de passe',
     });
-
-    return {
-      message:
-        'Si un compte est associé à cette adresse e-mail, un lien de réinitialisation vient d’être envoyé.',
-    };
-  }
-
-  async resetPassword(
-    dto: ResetPasswordDto,
-    meta?: RequestMeta,
-  ): Promise<AuthResult> {
-    const utilisateur = await this.prisma.utilisateur.findUnique({
-      where: { resetToken: dto.token },
-      ...userSafeArgs,
-    });
-
-    if (!utilisateur) {
-      throw new BadRequestException(
-        'Lien de réinitialisation invalide ou déjà utilisé.',
-      );
-    }
-
-    const newHash = await bcrypt.hash(
-      dto.newPassword,
-      this.configService.get<number>('bcryptRounds') ?? 12,
-    );
-
-    const updated = await this.prisma.utilisateur.update({
-      where: { id: utilisateur.id },
-      data: {
-        passwordHash: newHash,
-        temporaryPassword: false,
-        resetToken: null,
-      },
-      ...userSafeArgs,
-    });
-
-    const token = await this.issueToken(updated, undefined, meta);
-
-    await this.activityLog.log({
-      userId: utilisateur.id,
-      action: 'auth.resetPassword',
-      resource: 'auth',
-      detail: 'Mot de passe réinitialisé',
-      ip: meta?.ip,
-    });
-
-    return { token, user: updated };
-  }
-
-  async forgotPassword(dto: ForgotPasswordDto): Promise<{ success: boolean }> {
-    const email = dto.email.toLowerCase().trim();
-    const utilisateur = await this.prisma.utilisateur.findUnique({
-      where: { email },
-    });
-
-    // Réponse identique que le compte existe ou non (anti-énumération)
-    if (utilisateur && utilisateur.isActive) {
-      const code = this.generateNumericCode(6);
-      const codeHash = this.hashValue(code);
-      const expiresAt = new Date(Date.now() + PASSWORD_RESET_CODE_TTL_MS);
-
-      await this.prisma.utilisateur.update({
-        where: { id: utilisateur.id },
-        data: {
-          passwordResetCode: codeHash,
-          passwordResetCodeExpiresAt: expiresAt,
-          passwordResetAttempts: 0,
-        },
-      });
-
-      await this.emailService.sendPasswordResetCode({
-        to: utilisateur.email,
-        name: utilisateur.name,
-        code,
-      });
-    }
 
     return { success: true };
   }
@@ -455,7 +391,50 @@ export class AuthService {
       },
     });
 
+    await this.activityLog.log({
+      userId: utilisateur.id,
+      action: 'auth.resetPassword',
+      resource: 'auth',
+      detail: 'Mot de passe réinitialisé',
+    });
+
     return { success: true };
+  }
+
+  async logout(jti: string): Promise<void> {
+    if (jti) {
+      await this.sessionsService.revoke(jti);
+    }
+  }
+
+  private async recordAttempt(
+    email: string,
+    ip: string | null | undefined,
+    success: boolean,
+  ): Promise<void> {
+    await this.prisma.loginAttempt.create({
+      data: { email, ip: ip ?? null, success },
+    });
+  }
+
+  private async issueToken(
+    subject: TokenSubject,
+    expiresInSeconds: number | undefined,
+    meta?: RequestMeta,
+  ): Promise<string> {
+    const expiresIn =
+      expiresInSeconds ??
+      this.configService.get<number>('jwt.expiresIn') ??
+      86400;
+
+    const jti = await this.sessionsService.create(
+      subject.id,
+      expiresIn,
+      meta?.ip,
+      meta?.userAgent,
+    );
+
+    return this.signToken(subject, expiresIn, jti);
   }
 
   private generateNumericCode(length: number): string {
@@ -468,21 +447,16 @@ export class AuthService {
   }
 
   private async signToken(
-    utilisateur: Pick<
-      UserSafe,
-      'id' | 'email' | 'roleId' | 'temporaryPassword'
-    > & {
-      role: { name: string };
-    },
+    subject: TokenSubject,
     expiresIn: number,
     jti: string,
   ): Promise<string> {
     const payload: JwtPayload = {
-      sub: String(utilisateur.id),
-      id_role: utilisateur.roleId,
-      role: utilisateur.role.name,
-      email: utilisateur.email,
-      tempPassword: utilisateur.temporaryPassword,
+      sub: String(subject.id),
+      id_role: subject.roleId,
+      role: subject.role.name,
+      email: subject.email,
+      tempPassword: subject.temporaryPassword,
       jti,
     };
 
