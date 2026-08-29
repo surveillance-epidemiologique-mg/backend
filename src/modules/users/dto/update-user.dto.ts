@@ -15,14 +15,6 @@ export class UpdateUserDto {
 
   @IsOptional()
   @IsString()
-  firstName?: string;
-
-  @IsOptional()
-  @IsString()
-  lastName?: string;
-
-  @IsOptional()
-  @IsString()
   phoneNumber?: string;
 
   @IsOptional()
@@ -34,11 +26,6 @@ export class UpdateUserDto {
   @IsInt({ message: 'Le centre de santé doit être un identifiant entier.' })
   @Min(1)
   centreId?: number | null;
-
-  @IsOptional()
-  @IsInt({ message: 'La région doit être un identifiant entier.' })
-  @Min(1)
-  regionId?: number | null;
 
   @IsOptional()
   @IsBoolean({ message: 'Le statut doit être un booléen.' })

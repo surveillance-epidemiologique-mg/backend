@@ -1,0 +1,14 @@
+model Notification {
+  id        Int      @id @default(autoincrement()) @map("id_notification")
+  userId    Int      @map("id_utilisateur")
+  casId     Int?     @map("id_cas")
+  message   String   @map("message") @db.VarChar(255)
+  isRead    Boolean  @default(false) @map("lue")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user Utilisateur         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cas  CasEpidemiologique? @relation(fields: [casId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead], map: "idx_notification_user_lue")
+  @@map("notifications")
+}

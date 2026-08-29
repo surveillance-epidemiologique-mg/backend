@@ -15,7 +15,9 @@ model CasEpidemiologique {
   outcomeDate     DateTime? @map("date_issue") @db.Date
   declarationDate DateTime  @default(now()) @map("date_declaration")
 
-  symptoms String? @map("symptomes")
+  symptoms  String? @map("symptomes")
+  latitude  Float?  @map("latitude")
+  longitude Float?  @map("longitude")
   // caseLocation Unsupported("geometry(Point, 4326)")? @map("localisation_cas")
 
   patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -23,6 +25,8 @@ model CasEpidemiologique {
   centre     CentreSante  @relation(fields: [centreId], references: [id], onDelete: Restrict)
   agent      Utilisateur  @relation("CasAgent", fields: [agentId], references: [id], onDelete: Restrict)
   laboratory Utilisateur? @relation("CasLaboratoire", fields: [laboratoryId], references: [id], onDelete: SetNull)
+
+  notifications Notification[]
 
   @@index([diagnosisDate], map: "idx_cas_dates")
   @@index([diagnosticStatus, clinicalOutcome], map: "idx_cas_diag_issue")

@@ -10,9 +10,8 @@ import * as crypto from 'node:crypto';
 import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { EmailService } from '../email/email.service';
-import { ActivityLogService } from '../../core/activity-log/activity-log.service';
 import { INVITABLE_ROLES } from '../../common/constants/roles';
-import { TypeZone } from '../../../generated/prisma/enums';
+import type { RoleName } from '../../common/constants/roles';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -37,10 +36,9 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
-    private readonly activityLog: ActivityLogService,
   ) {}
 
-  async invite(inviterId: number, dto: InviteUserDto) {
+  async invite(dto: InviteUserDto) {
     const email = dto.email.toLowerCase().trim();
 
     const existing = await this.prisma.utilisateur.findUnique({
@@ -58,11 +56,9 @@ export class UsersService {
     if (!role) {
       throw new NotFoundException('Rôle introuvable.');
     }
-    if (
-      !INVITABLE_ROLES.includes(role.name as (typeof INVITABLE_ROLES)[number])
-    ) {
+    if (!INVITABLE_ROLES.includes(role.name as RoleName)) {
       throw new BadRequestException(
-        "Ce rôle ne peut pas être créé via l'invitation.",
+        "Seuls les rôles « Médecin » et « Laboratoire » peuvent être créés via l'invitation.",
       );
     }
 
@@ -75,116 +71,51 @@ export class UsersService {
       }
     }
 
-    if (dto.regionId) {
-      const region = await this.prisma.zoneAdministrative.findUnique({
-        where: { id: dto.regionId },
-      });
-      if (!region || region.type !== TypeZone.Region) {
-        throw new BadRequestException('Région invalide.');
-      }
-    }
-
-    const activationToken = crypto.randomBytes(32).toString('hex');
-    const throwawayPassword = crypto.randomBytes(16).toString('base64url');
+    const temporaryPassword = this.generateTemporaryPassword(12);
     const passwordHash = await bcrypt.hash(
-      throwawayPassword,
+      temporaryPassword,
       this.configService.get<number>('bcryptRounds') ?? 12,
     );
-    const resetTokenHash = this.hashToken(activationToken);
-    const tokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const resetToken = crypto.randomBytes(32).toString('hex');
 
     const utilisateur = await this.prisma.utilisateur.create({
       data: {
-        name: this.composeName(dto),
-        firstName: dto.firstName ?? null,
-        lastName: dto.lastName ?? null,
+        name: dto.name.trim(),
         email,
         phoneNumber: dto.phoneNumber,
         passwordHash,
         temporaryPassword: true,
-        resetToken: resetTokenHash,
-        resetTokenExpiresAt: tokenExpiresAt,
-        isActive: dto.isActive ?? true,
+        resetToken,
+        isActive: true,
         roleId: role.id,
         centreId: dto.centreId,
-        regionId: dto.regionId,
       },
       ...userSafeListArgs,
     });
 
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
-    const activationLink = `${frontendUrl}/activate?token=${activationToken}`;
+    const activationLink = `${frontendUrl}/activate?token=${resetToken}`;
 
-    await this.emailService.sendActivationEmail({
-      to: utilisateur.email,
-      name: utilisateur.name,
-      activationLink,
-    });
-
-    await this.activityLog.log({
-      userId: inviterId,
-      action: 'user.invite',
-      resource: 'user',
-      resourceId: utilisateur.id,
-      detail: `Invitation de ${utilisateur.email} (rôle ${role.name})`,
-    });
+    try {
+      await this.emailService.sendWelcomeEmail({
+        to: utilisateur.email,
+        name: utilisateur.name,
+        tempPassword: temporaryPassword,
+        activationLink,
+      });
+    } catch (error) {
+      // L'e-mail n'a pas pu être envoyé : on annule la création du compte
+      // pour éviter un compte orphelin jamais notifié.
+      await this.prisma.utilisateur.delete({ where: { id: utilisateur.id } });
+      throw error;
+    }
 
     return {
       user: utilisateur,
+      temporaryPassword,
       activationLink,
     };
-  }
-
-  async resendInvitation(
-    actorId: number,
-    id: number,
-  ): Promise<{ message: string; activationLink: string }> {
-    const utilisateur = await this.prisma.utilisateur.findUnique({
-      where: { id },
-    });
-    if (!utilisateur) {
-      throw new NotFoundException('Utilisateur introuvable.');
-    }
-    if (!utilisateur.isActive) {
-      throw new ConflictException(
-        'Impossible de renvoyer une invitation sur un compte désactivé.',
-      );
-    }
-    if (utilisateur.activatedAt !== null) {
-      throw new ConflictException(
-        'Ce compte a déjà été activé : aucun lien à renvoyer.',
-      );
-    }
-
-    const activationToken = crypto.randomBytes(32).toString('hex');
-    await this.prisma.utilisateur.update({
-      where: { id },
-      data: {
-        resetToken: this.hashToken(activationToken),
-        resetTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-      },
-    });
-
-    const frontendUrl =
-      this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
-    const activationLink = `${frontendUrl}/activate?token=${activationToken}`;
-
-    await this.emailService.sendActivationEmail({
-      to: utilisateur.email,
-      name: utilisateur.name,
-      activationLink,
-    });
-
-    await this.activityLog.log({
-      userId: actorId,
-      action: 'user.resendInvitation',
-      resource: 'user',
-      resourceId: id,
-      detail: `Renvoyer l'invitation à ${utilisateur.email}`,
-    });
-
-    return { message: 'Invitation renvoyée.', activationLink };
   }
 
   async listRoles() {
@@ -193,11 +124,14 @@ export class UsersService {
     });
   }
 
-  async updateUser(
-    actorId: number,
-    id: number,
-    dto: UpdateUserDto,
-  ): Promise<UserSafe> {
+  async listCentres() {
+    return this.prisma.centreSante.findMany({
+      include: { zone: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async updateUser(id: number, dto: UpdateUserDto): Promise<UserSafe> {
     const existing = await this.prisma.utilisateur.findUnique({
       where: { id },
     });
@@ -209,15 +143,6 @@ export class UsersService {
 
     if (dto.name !== undefined) {
       data.name = dto.name.trim();
-    }
-    if (dto.firstName !== undefined || dto.lastName !== undefined) {
-      data.firstName = dto.firstName ?? existing.firstName;
-      data.lastName = dto.lastName ?? existing.lastName;
-      const firstName = data.firstName ?? existing.firstName;
-      const lastName = data.lastName ?? existing.lastName;
-      if (firstName || lastName) {
-        data.name = [firstName, lastName].filter(Boolean).join(' ');
-      }
     }
     if (dto.phoneNumber !== undefined) {
       data.phoneNumber = dto.phoneNumber;
@@ -247,42 +172,15 @@ export class UsersService {
         data.centre = { connect: { id: dto.centreId } };
       }
     }
-    if (dto.regionId !== undefined) {
-      if (dto.regionId === null) {
-        data.region = { disconnect: true };
-      } else {
-        const region = await this.prisma.zoneAdministrative.findUnique({
-          where: { id: dto.regionId },
-        });
-        if (!region || region.type !== TypeZone.Region) {
-          throw new BadRequestException('Région invalide.');
-        }
-        data.region = { connect: { id: dto.regionId } };
-      }
-    }
 
-    const utilisateur = await this.prisma.utilisateur.update({
+    return this.prisma.utilisateur.update({
       where: { id },
       data,
       ...userSafeListArgs,
     });
-
-    await this.activityLog.log({
-      userId: actorId,
-      action: 'user.update',
-      resource: 'user',
-      resourceId: id,
-      detail: `Modification du compte ${utilisateur.email}`,
-    });
-
-    return utilisateur;
   }
 
-  async setUserStatus(
-    actorId: number,
-    id: number,
-    isActive: boolean,
-  ): Promise<UserSafe> {
+  async setUserStatus(id: number, isActive: boolean): Promise<UserSafe> {
     const existing = await this.prisma.utilisateur.findUnique({
       where: { id },
     });
@@ -290,87 +188,10 @@ export class UsersService {
       throw new NotFoundException('Utilisateur introuvable.');
     }
 
-    const utilisateur = await this.prisma.utilisateur.update({
+    return this.prisma.utilisateur.update({
       where: { id },
       data: { isActive },
       ...userSafeListArgs,
-    });
-
-    await this.activityLog.log({
-      userId: actorId,
-      action: 'user.status',
-      resource: 'user',
-      resourceId: id,
-      detail: `Compte ${utilisateur.email} ${isActive ? 'activé' : 'désactivé'}`,
-    });
-
-    return utilisateur;
-  }
-
-  async remove(actorId: number, id: number): Promise<{ message: string }> {
-    if (id === actorId) {
-      throw new BadRequestException(
-        'Vous ne pouvez pas supprimer votre propre compte.',
-      );
-    }
-
-    const existing = await this.prisma.utilisateur.findUnique({
-      where: { id },
-    });
-    if (!existing) {
-      throw new NotFoundException('Utilisateur introuvable.');
-    }
-
-    const [
-      casDeclares,
-      signalementsCrees,
-      signalementsDecides,
-      alertesCrees,
-      alertesAssignees,
-      alertesResolues,
-    ] = await Promise.all([
-      this.prisma.casEpidemiologique.count({
-        where: { agentId: id },
-      }),
-      this.prisma.signalement.count({ where: { createdById: id } }),
-      this.prisma.signalement.count({ where: { decidedById: id } }),
-      this.prisma.alerte.count({ where: { createdById: id } }),
-      this.prisma.alerte.count({ where: { assigneeId: id } }),
-      this.prisma.alerte.count({ where: { resolvedById: id } }),
-    ]);
-
-    const linked =
-      casDeclares +
-      signalementsCrees +
-      signalementsDecides +
-      alertesCrees +
-      alertesAssignees +
-      alertesResolues;
-
-    if (linked > 0) {
-      throw new ConflictException(
-        `Impossible de supprimer : ${linked} élément(s) de données sont lié(s) à ce compte. Désactivez-le à la place.`,
-      );
-    }
-
-    await this.prisma.sessionToken.deleteMany({ where: { userId: id } });
-    await this.prisma.utilisateur.delete({ where: { id } });
-
-    await this.activityLog.log({
-      userId: actorId,
-      action: 'user.delete',
-      resource: 'user',
-      resourceId: id,
-      detail: `Compte ${existing.email} supprimé`,
-    });
-
-    return { message: 'Utilisateur supprimé.' };
-  }
-
-  async listCentres() {
-    return this.prisma.centreSante.findMany({
-      include: { zone: true },
-      orderBy: { name: 'asc' },
     });
   }
 
@@ -381,23 +202,29 @@ export class UsersService {
     });
   }
 
-  // ---- Helpers ----
+  private generateTemporaryPassword(length = 12): string {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnopqrstuvwxyz';
+    const digits = '23456789';
+    const symbols = '!@#$%&*?';
+    const all = upper + lower + digits + symbols;
 
-  private composeName(dto: {
-    name: string;
-    firstName?: string;
-    lastName?: string;
-  }): string {
-    if (dto.firstName && dto.lastName) {
-      return `${dto.firstName.trim()} ${dto.lastName.trim()}`;
-    }
-    if (dto.firstName || dto.lastName) {
-      return (dto.firstName ?? dto.lastName)!.trim();
-    }
-    return dto.name.trim();
-  }
+    const chars = [
+      upper[crypto.randomInt(upper.length)],
+      lower[crypto.randomInt(lower.length)],
+      digits[crypto.randomInt(digits.length)],
+      symbols[crypto.randomInt(symbols.length)],
+    ];
 
-  private hashToken(token: string): string {
-    return crypto.createHash('sha256').update(token).digest('hex');
+    for (let i = chars.length; i < length; i++) {
+      chars.push(all[crypto.randomInt(all.length)]);
+    }
+
+    for (let i = chars.length - 1; i > 0; i--) {
+      const j = crypto.randomInt(i + 1);
+      [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+
+    return chars.join('');
   }
 }

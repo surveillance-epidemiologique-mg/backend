@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -15,7 +14,6 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { SetUserStatusDto } from './dto/set-user-status.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ROLES } from '../../common/constants/roles';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -25,9 +23,9 @@ export class UsersController {
 
   @Roles(ROLES.ADMINISTRATEUR)
   @Post('invite')
-  @ApiOperation({ summary: 'Inviter un utilisateur' })
-  invite(@CurrentUser('id') userId: number, @Body() dto: InviteUserDto) {
-    return this.usersService.invite(userId, dto);
+  @ApiOperation({ summary: 'Inviter un utilisateur (médecin ou laboratoire)' })
+  invite(@Body() dto: InviteUserDto) {
+    return this.usersService.invite(dto);
   }
 
   @Roles(ROLES.ADMINISTRATEUR)
@@ -40,43 +38,18 @@ export class UsersController {
   @Roles(ROLES.ADMINISTRATEUR)
   @Patch(':id')
   @ApiOperation({ summary: 'Modifier un utilisateur' })
-  update(
-    @CurrentUser('id') userId: number,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdateUserDto,
-  ) {
-    return this.usersService.updateUser(userId, id, dto);
-  }
-
-  @Roles(ROLES.ADMINISTRATEUR)
-  @Post(':id/resend-invitation')
-  @ApiOperation({ summary: "Renvoyer l'e-mail d'invitation" })
-  resendInvitation(
-    @CurrentUser('id') userId: number,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.usersService.resendInvitation(userId, id);
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateUserDto) {
+    return this.usersService.updateUser(id, dto);
   }
 
   @Roles(ROLES.ADMINISTRATEUR)
   @Patch(':id/status')
   @ApiOperation({ summary: 'Activer ou désactiver un utilisateur' })
   setStatus(
-    @CurrentUser('id') userId: number,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: SetUserStatusDto,
   ) {
-    return this.usersService.setUserStatus(userId, id, dto.isActive);
-  }
-
-  @Roles(ROLES.ADMINISTRATEUR)
-  @Delete(':id')
-  @ApiOperation({ summary: 'Supprimer un utilisateur (sans historique lié)' })
-  remove(
-    @CurrentUser('id') userId: number,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.usersService.remove(userId, id);
+    return this.usersService.setUserStatus(id, dto.isActive);
   }
 
   @Roles(ROLES.ADMINISTRATEUR)

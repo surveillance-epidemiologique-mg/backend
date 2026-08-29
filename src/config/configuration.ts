@@ -13,6 +13,8 @@ export default () => ({
   bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS ?? '12', 10),
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3000',
   smtp: {
+    mode:
+      process.env.EMAIL_MODE ?? (process.env.SMTP_HOST ? 'smtp' : 'simulation'),
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT ?? '587', 10),
     secure: process.env.SMTP_SECURE === 'true',
