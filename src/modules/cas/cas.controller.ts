@@ -12,11 +12,15 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { StatutDiag } from '../../../generated/prisma/client';
 import { CasService } from './cas.service';
 import { CreateCaseDto } from './dto/create-case.dto';
+import { ListCasesQueryDto } from './dto/list-cases-query.dto';
 import { UpdateResultDto } from './dto/update-result.dto';
 import { UpdateIssueDto } from './dto/update-issue.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ROLES } from '../../common/constants/roles';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  type AuthenticatedUser,
+} from '../../common/decorators/current-user.decorator';
 
 @ApiTags('cas')
 @ApiBearerAuth()
@@ -26,9 +30,34 @@ export class CasController {
 
   @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Post()
-  @ApiOperation({ summary: 'Déclarer un cas suspect' })
-  declare(@CurrentUser('id') userId: number, @Body() dto: CreateCaseDto) {
-    return this.casService.declare(userId, dto);
+  @ApiOperation({ summary: 'Déclarer un cas suspect ou confirmé' })
+  declare(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateCaseDto,
+  ) {
+    return this.casService.declare(user, dto);
+  }
+
+  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Get()
+  @ApiOperation({
+    summary:
+      'Lister les cas (Admin/Labo : tous ; Médecin : uniquement ceux de son centre)',
+  })
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: ListCasesQueryDto,
+  ) {
+    return this.casService.listForUser(user, query);
+  }
+
+  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Get('years')
+  @ApiOperation({
+    summary: 'Années disponibles de date_diagnostic (selon la visibilité du rôle)',
+  })
+  years(@CurrentUser() user: AuthenticatedUser) {
+    return this.casService.listYears(user);
   }
 
   @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
@@ -46,10 +75,8 @@ export class CasController {
   @ApiOperation({
     summary: 'Cas en attente (Suspect) pour le laboratoire',
   })
-  laboratoire(@Query('centreId') centreId?: string) {
-    return this.casService.laboratoirePending(
-      centreId ? Number(centreId) : undefined,
-    );
+  laboratoire(@Query() query: ListCasesQueryDto) {
+    return this.casService.laboratoirePending(query);
   }
 
   @Roles(ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)

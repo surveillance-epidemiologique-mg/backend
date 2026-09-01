@@ -57,7 +57,6 @@ const userSafeWithZoneArgs = {
   include: {
     role: true,
     centre: { include: { zone: true } },
-    region: true,
   },
   omit: SENSITIVE_FIELDS,
 } as const;

@@ -40,8 +40,6 @@ export class CentresService {
         zoneId: dto.zoneId,
         latitude: dto.latitude,
         longitude: dto.longitude,
-        address: dto.address,
-        isActive: dto.isActive ?? true,
       },
       ...centreWithZoneArgs,
     });
@@ -78,13 +76,6 @@ export class CentresService {
     if (dto.longitude !== undefined) {
       data.longitude = dto.longitude;
     }
-    if (dto.address !== undefined) {
-      data.address = dto.address;
-    }
-    if (dto.isActive !== undefined) {
-      data.isActive = dto.isActive;
-    }
-
     return this.prisma.centreSante.update({
       where: { id },
       data,

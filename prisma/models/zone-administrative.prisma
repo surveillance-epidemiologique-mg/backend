@@ -1,10 +1,10 @@
 model ZoneAdministrative {
-  id       Int      @id @default(autoincrement()) @map("id_zone")
-  name     String   @map("nom_zone") @db.VarChar(100)
-  type     TypeZone @map("type_zone")
-  pcode    String?  @unique @map("code_pcode") @db.VarChar(20)
-  parentId Int?     @map("id_zone_parent")
-  // geometry Unsupported("geometry(MultiPolygon, 4326)")? @map("geometrie")
+  id        Int                                          @id @default(autoincrement()) @map("id_zone")
+  name      String                                       @map("nom_zone") @db.VarChar(100)
+  type      TypeZone                                     @map("type_zone")
+  pcode     String?                                      @unique @map("code_pcode") @db.VarChar(20)
+  parentId  Int?                                         @map("id_zone_parent")
+  geometrie Unsupported("geometry(MultiPolygon, 4326)")? @map("geometrie")
 
   parent   ZoneAdministrative?  @relation("ZoneHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
   children ZoneAdministrative[] @relation("ZoneHierarchy")
@@ -12,12 +12,6 @@ model ZoneAdministrative {
   centres  CentreSante[]
   patients Patient[]
   alertes  Alerte[]
-
-  signalementsRegion   Signalement[] @relation("SignalementRegion")
-  signalementsDistrict Signalement[] @relation("SignalementDistrict")
-
-  reglesAlerte       RegleAlerte[]
-  utilisateursRegion Utilisateur[] @relation("UtilisateurRegion")
 
   @@map("zones_administratives")
 }

@@ -74,7 +74,7 @@ export async function seedCasEpidemiologiques(
     const declarationDate = new Date(diagnosisDate);
     declarationDate.setHours(8 + (i % 8), 15, 0, 0);
 
-    await prisma.casEpidemiologique.create({
+    const created = await prisma.casEpidemiologique.create({
       data: {
         patientId: patient.id,
         maladieId: maladie.id,
@@ -88,5 +88,16 @@ export async function seedCasEpidemiologiques(
         symptoms: cas.symptoms,
       },
     });
+
+    if (centre.latitude != null && centre.longitude != null) {
+      await prisma.$executeRaw`
+        UPDATE cas_epidemiologiques
+        SET localisation_cas = ST_SetSRID(
+          ST_MakePoint(${centre.longitude + (i % 5) * 0.008 - 0.016}, ${centre.latitude + (i % 3) * 0.008 - 0.008}),
+          4326
+        )
+        WHERE id_cas = ${created.id}
+      `;
+    }
   }
 }

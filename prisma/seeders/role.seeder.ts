@@ -1,9 +1,12 @@
 import { Prisma } from "../../generated/prisma/client";
 import { ROLES } from "../../src/common/constants/roles";
-import {
-  ALL_PERMISSIONS,
-  ROLE_PERMISSIONS,
-} from "../../src/common/constants/permissions";
+
+const ROLE_DESCRIPTIONS: Record<string, string> = {
+  Administrateur:
+    "Administrateur système : gestion des utilisateurs, des référentiels et des paramètres.",
+  Medecin: "Médecin : déclaration des cas, suivi clinique et épidémiologique.",
+  Laboratoire: "Laboratoire : analyse des cas, saisie des résultats biologiques.",
+};
 
 export async function seedRoles(prisma: Prisma.TransactionClient) {
   const roleNames = Object.values(ROLES);
@@ -11,36 +14,8 @@ export async function seedRoles(prisma: Prisma.TransactionClient) {
   for (const name of roleNames) {
     await prisma.role.upsert({
       where: { name },
-      update: {},
-      create: { name },
+      update: { description: ROLE_DESCRIPTIONS[name] ?? null },
+      create: { name, description: ROLE_DESCRIPTIONS[name] ?? null },
     });
-  }
-
-  for (const code of ALL_PERMISSIONS) {
-    await prisma.permission.upsert({
-      where: { code },
-      update: { description: code },
-      create: { code, description: code },
-    });
-  }
-
-  await prisma.rolePermission.deleteMany();
-
-  for (const [roleName, codes] of Object.entries(ROLE_PERMISSIONS)) {
-    const role = await prisma.role.findUnique({ where: { name: roleName } });
-    if (!role) {
-      continue;
-    }
-    const permissions = await prisma.permission.findMany({
-      where: { code: { in: [...codes] } },
-    });
-    if (permissions.length > 0) {
-      await prisma.rolePermission.createMany({
-        data: permissions.map((permission) => ({
-          roleId: role.id,
-          permissionId: permission.id,
-        })),
-      });
-    }
   }
 }

@@ -1,7 +1,21 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsInt, IsOptional, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  MinLength,
+} from 'class-validator';
 
 export class CreatePatientDto {
+  @ApiProperty({ description: 'Nom du patient', example: 'Patient 01' })
+  @IsString()
+  @MinLength(2, {
+    message: 'Le nom du patient doit contenir au moins 2 caractères.',
+  })
+  namePatient!: string;
+
   @ApiPropertyOptional({ description: 'Âge (années)', example: 34 })
   @IsOptional()
   @IsInt()

@@ -19,6 +19,7 @@ enum TypeCentre {
 
 enum StatutDiag {
   Suspect
+  Probable
   Confirme
   Invalide
 
@@ -34,39 +35,19 @@ enum IssueClinique {
   @@map("issue_clinique_enum")
 }
 
-enum StatutAlerte {
-  Active
-  EnPriseEnCharge @map("En_prise_en_charge")
-  Resolue
-
-  @@map("statut_alerte_enum")
-}
-
-enum NiveauRisque {
-  Normal
-  Surveillance
-  Alerte
+enum Gravite {
+  Faible
+  Modere
+  Eleve
   Critique
 
-  @@map("niveau_risque_enum")
+  @@map("gravite_enum")
 }
 
-enum ActionHistorique {
-  Creation
-  Detection
-  PriseEnCharge
-  Resolution
-  Reouverture
-  MiseAJour
+enum StatutAlerte {
+  Active
+  EnInvestigation @map("En_investigation")
+  Cloturee
 
-  @@map("action_historique_enum")
-}
-
-enum StatutSignalement {
-  Brouillon
-  EnAttente
-  Valide
-  Rejete
-
-  @@map("statut_signalement_enum")
+  @@map("statut_alerte_enum")
 }

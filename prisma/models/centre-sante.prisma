@@ -1,19 +1,15 @@
 model CentreSante {
-  id        Int        @id @default(autoincrement()) @map("id_centre")
-  name      String     @map("nom_centre") @db.VarChar(150)
-  type      TypeCentre @map("type_centre")
-  zoneId    Int        @map("id_zone")
-  latitude  Float?     @map("latitude")
-  longitude Float?     @map("longitude")
-  address   String?    @map("adresse")
-  isActive  Boolean    @default(true) @map("is_active")
-  // location Unsupported("geometry(Point, 4326)")? @map("localisation")
+  id           Int                                   @id @default(autoincrement()) @map("id_centre")
+  name         String                                @map("nom_centre") @db.VarChar(150)
+  type         TypeCentre                            @map("type_centre")
+  zoneId       Int                                   @map("id_zone")
+  localisation Unsupported("geometry(Point, 4326)")? @map("localisation")
+  latitude     Float?                                @map("latitude")
+  longitude    Float?                                @map("longitude")
 
-  zone ZoneAdministrative @relation(fields: [zoneId], references: [id], onDelete: Restrict)
-
-  users        Utilisateur[]
-  cas          CasEpidemiologique[]
-  signalements Signalement[]
+  zone  ZoneAdministrative   @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  users Utilisateur[]
+  cas   CasEpidemiologique[]
 
   @@map("centres_sante")
 }

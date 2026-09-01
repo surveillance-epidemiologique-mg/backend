@@ -6,6 +6,6 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  // extensions = [postgis]
+  provider   = "postgresql"
+  extensions = [postgis]
 }

@@ -1,107 +1,64 @@
 import { Prisma } from "../../generated/prisma/client";
-import { NiveauRisque } from "../../generated/prisma/enums";
+import { Gravite, StatutAlerte } from "../../generated/prisma/enums";
 
-interface RegleAlerteSeed {
-  name: string;
-  description: string;
-  maladieName: string | null;
+interface AlerteSeed {
+  maladieName: string;
   districtPcode: string;
-  periodDays: number;
-  threshold: number;
-  niveau: NiveauRisque;
+  niveauGravite: Gravite;
+  statutAlerte: StatutAlerte;
+  detectedCaseCount: number;
+  daysAgo: number;
 }
 
-const REGLES: RegleAlerteSeed[] = [
-  {
-    name: "Choléra - seuil 1 cas / 7 jours",
-    description: "Alerte déclenchée dès 1 cas de choléra détecté sur 7 jours.",
-    maladieName: "Choléra",
-    districtPcode: "MG-T1",
-    periodDays: 7,
-    threshold: 1,
-    niveau: NiveauRisque.Alerte,
-  },
-  {
-    name: "Rougeole - seuil 1 cas / 7 jours",
-    description: "Surveillance renforcée dès 1 cas de rougeole sur 7 jours.",
-    maladieName: "Rougeole",
-    districtPcode: "MG-T1",
-    periodDays: 7,
-    threshold: 1,
-    niveau: NiveauRisque.Surveillance,
-  },
-  {
-    name: "Paludisme - seuil 2 cas / 7 jours",
-    description: "Situation critique dès 2 cas de paludisme sur 7 jours à Toamasina.",
-    maladieName: "Paludisme",
-    districtPcode: "MG-A1",
-    periodDays: 7,
-    threshold: 2,
-    niveau: NiveauRisque.Critique,
-  },
-  {
-    name: "Grippe - seuil 1 cas / 7 jours",
-    description: "Alerte grippe dès 1 cas sur 7 jours à Toamasina.",
-    maladieName: "Grippe",
-    districtPcode: "MG-A1",
-    periodDays: 7,
-    threshold: 1,
-    niveau: NiveauRisque.Alerte,
-  },
-  {
-    name: "Dengue - seuil 1 cas / 7 jours",
-    description: "Surveillance dengue dès 1 cas sur 7 jours à Toamasina.",
-    maladieName: "La dengue",
-    districtPcode: "MG-A1",
-    periodDays: 7,
-    threshold: 1,
-    niveau: NiveauRisque.Surveillance,
-  },
-  {
-    name: "Peste - seuil 1 cas / 7 jours",
-    description: "Situation critique dès 1 cas de peste sur 7 jours.",
-    maladieName: "La peste",
-    districtPcode: "MG-T1",
-    periodDays: 7,
-    threshold: 1,
-    niveau: NiveauRisque.Critique,
-  },
+const ALERTES: AlerteSeed[] = [
+  { maladieName: "Choléra", districtPcode: "MG-T1", niveauGravite: Gravite.Eleve, statutAlerte: StatutAlerte.Active, detectedCaseCount: 3, daysAgo: 1 },
+  { maladieName: "Rougeole", districtPcode: "MG-A1", niveauGravite: Gravite.Modere, statutAlerte: StatutAlerte.EnInvestigation, detectedCaseCount: 2, daysAgo: 2 },
+  { maladieName: "Paludisme", districtPcode: "MG-A1", niveauGravite: Gravite.Critique, statutAlerte: StatutAlerte.Active, detectedCaseCount: 5, daysAgo: 3 },
+  { maladieName: "La dengue", districtPcode: "MG-A1", niveauGravite: Gravite.Faible, statutAlerte: StatutAlerte.Cloturee, detectedCaseCount: 1, daysAgo: 6 },
 ];
 
-export async function seedReglesAlerte(prisma: Prisma.TransactionClient) {
-  const existing = await prisma.regleAlerte.count();
+export async function seedAlertes(prisma: Prisma.TransactionClient) {
+  const existing = await prisma.alerte.count();
   if (existing > 0) {
     return;
   }
 
   const maladies = await prisma.maladie.findMany();
-  const zones = await prisma.zoneAdministrative.findMany({
-    where: { pcode: { in: ["MG-T1", "MG-A1"] } },
-  });
+  const zones = await prisma.zoneAdministrative.findMany();
 
-  if (!zones.length) {
-    throw new Error("Seed règles d'alerte : zones administratives manquantes.");
-  }
-
-  for (const regle of REGLES) {
-    const zone = zones.find((z) => z.pcode === regle.districtPcode);
-    if (!zone) {
+  for (const alerte of ALERTES) {
+    const maladie = maladies.find((m) => m.name === alerte.maladieName);
+    const zone = zones.find((z) => z.pcode === alerte.districtPcode);
+    if (!maladie || !zone) {
       continue;
     }
-    const maladie = regle.maladieName
-      ? maladies.find((m) => m.name === regle.maladieName)
-      : null;
 
-    await prisma.regleAlerte.create({
+    const dateDetection = new Date();
+    dateDetection.setDate(dateDetection.getDate() - alerte.daysAgo);
+
+    const created = await prisma.alerte.create({
       data: {
-        name: regle.name,
-        description: regle.description,
-        maladieId: maladie?.id ?? null,
+        maladieId: maladie.id,
         zoneId: zone.id,
-        periodDays: regle.periodDays,
-        threshold: regle.threshold,
-        niveau: regle.niveau,
+        detectionDate: dateDetection,
+        niveauGravite: alerte.niveauGravite,
+        statutAlerte: alerte.statutAlerte,
+        detectedCaseCount: alerte.detectedCaseCount,
       },
     });
+
+    const centre = await prisma.centreSante.findFirst({
+      where: { zoneId: zone.id },
+    });
+    if (centre?.latitude != null && centre?.longitude != null) {
+      await prisma.$executeRaw`
+        UPDATE alertes
+        SET emprise_spatiale = ST_Buffer(
+          ST_SetSRID(ST_MakePoint(${centre.longitude}, ${centre.latitude}), 4326)::geography,
+          20000
+        )::geometry
+        WHERE id_alerte = ${created.id}
+      `;
+    }
   }
 }

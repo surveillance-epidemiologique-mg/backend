@@ -15,10 +15,10 @@ model CasEpidemiologique {
   outcomeDate     DateTime? @map("date_issue") @db.Date
   declarationDate DateTime  @default(now()) @map("date_declaration")
 
-  symptoms  String? @map("symptomes")
-  latitude  Float?  @map("latitude")
-  longitude Float?  @map("longitude")
-  // caseLocation Unsupported("geometry(Point, 4326)")? @map("localisation_cas")
+  symptoms        String?                               @map("symptomes")
+  localisationCas Unsupported("geometry(Point, 4326)")? @map("localisation_cas")
+  latitude        Float?                                @map("latitude")
+  longitude       Float?                                @map("longitude")
 
   patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
   maladie    Maladie      @relation(fields: [maladieId], references: [id], onDelete: Restrict)

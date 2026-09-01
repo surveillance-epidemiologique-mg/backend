@@ -13,6 +13,7 @@ export class PatientsService {
     return this.prisma.patient.create({
       data: {
         anonymousCode,
+        namePatient: dto.namePatient.trim(),
         age: dto.age,
         gender: dto.gender ?? null,
         residenceZoneId: dto.residenceZoneId,

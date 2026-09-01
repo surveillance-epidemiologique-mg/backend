@@ -19,7 +19,6 @@ export class MaladiesService {
       data: {
         name: dto.name.trim(),
         icd10Code: dto.icd10Code?.trim().toUpperCase() || null,
-        iconName: dto.iconName?.trim() || null,
         alertThreshold: dto.alertThreshold,
         description: dto.description,
       },
@@ -39,9 +38,6 @@ export class MaladiesService {
     }
     if (dto.icd10Code !== undefined) {
       data.icd10Code = dto.icd10Code?.trim().toUpperCase() || null;
-    }
-    if (dto.iconName !== undefined) {
-      data.iconName = dto.iconName?.trim() || null;
     }
     if (dto.alertThreshold !== undefined) {
       data.alertThreshold = dto.alertThreshold;
