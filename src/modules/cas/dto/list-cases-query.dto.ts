@@ -41,6 +41,26 @@ export class ListCasesQueryDto {
   year?: number;
 
   @ApiPropertyOptional({
+    description: 'Mois de date_diagnostic (1-12)',
+    example: 8,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  month?: number;
+
+  @ApiPropertyOptional({
+    description: 'Jour de date_diagnostic (1-31)',
+    example: 29,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  day?: number;
+
+  @ApiPropertyOptional({
     description:
       'Centre de santé (ignoré pour un Médecin qui reste limité à son centre)',
     example: 2,

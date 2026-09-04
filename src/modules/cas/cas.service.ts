@@ -155,11 +155,21 @@ export class CasService {
     if (query.statut) {
       where.diagnosticStatus = query.statut;
     }
-    if (query.year !== undefined) {
-      where.diagnosisDate = {
-        gte: new Date(query.year, 0, 1),
-        lt: new Date(query.year + 1, 0, 1),
-      };
+    if (
+      query.year !== undefined ||
+      query.month !== undefined ||
+      query.day !== undefined
+    ) {
+      const year = query.year ?? new Date().getFullYear();
+      const month = query.month ?? 1;
+      const start = new Date(Date.UTC(year, month - 1, query.day ?? 1));
+      const end =
+        query.day !== undefined
+          ? new Date(Date.UTC(year, month - 1, query.day + 1))
+          : query.month !== undefined
+            ? new Date(Date.UTC(year, month, 1))
+            : new Date(Date.UTC(year + 1, 0, 1));
+      where.diagnosisDate = { gte: start, lt: end };
     }
 
     const patientWhere: Prisma.PatientWhereInput = {};

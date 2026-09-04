@@ -26,7 +26,7 @@ export class CentresController {
     return this.centresService.list();
   }
 
-  @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
+  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('zones')
   @ApiOperation({ summary: 'Lister les zones administratives' })
   listZones() {

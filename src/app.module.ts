@@ -12,6 +12,9 @@ import { CentresModule } from './modules/centres/centres.module';
 import { PatientsModule } from './modules/patients/patients.module';
 import { CasModule } from './modules/cas/cas.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AlertesModule } from './modules/alertes/alertes.module';
+import { CarteModule } from './modules/carte/carte.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { LoggingMiddleware } from './common/middleware/logging.middleware';
@@ -30,6 +33,9 @@ import { LoggingMiddleware } from './common/middleware/logging.middleware';
     PatientsModule,
     CasModule,
     NotificationsModule,
+    AlertesModule,
+    CarteModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [
