@@ -16,7 +16,7 @@
     "prestart:debug": "node scripts/free-port.js 3001",
     "start:debug": "nest start --debug --watch",
     "prestart:prod": "node scripts/free-port.js 3001",
-    "start:prod": "node dist/src/main.js",
+    "start:prod": "npx prisma migrate deploy --config ./prisma.config.ts && node dist/src/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -33,6 +33,7 @@
     "prisma:sync": "npm run prisma:format && npm run prisma:generate && npm run prisma:push && npm run prisma:seed && exit"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -41,6 +42,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.4.7",
+    "@prisma/adapter-neon": "^7.10.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "@types/pdfkit": "^0.17.6",
@@ -55,7 +57,8 @@
     "pdfkit": "^0.20.1",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -72,6 +75,7 @@
     "@types/nodemailer": "^8.0.1",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
