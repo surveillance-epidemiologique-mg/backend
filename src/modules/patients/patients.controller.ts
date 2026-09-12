@@ -66,11 +66,11 @@ export class PatientsController {
     return this.patientsService.update(user, id, dto);
   }
 
-  @Roles(ROLES.ADMINISTRATEUR)
+  @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Delete(':id')
   @ApiOperation({
     summary:
-      'Supprimer un patient (Admin uniquement ; bloqué si des cas y sont associés).',
+      'Supprimer un patient (Médecin limité à son centre, Admin tous ; bloqué si des cas y sont associés).',
   })
   remove(
     @CurrentUser() user: AuthenticatedUser,

@@ -2,6 +2,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import * as crypto from 'node:crypto';
@@ -13,12 +14,14 @@ import { UpdatePatientDto } from './dto/update-patient.dto';
 
 @Injectable()
 export class PatientsService {
+  private readonly logger = new Logger(PatientsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreatePatientDto) {
     const anonymousCode = await this.generateAnonymousCode();
 
-    return this.prisma.patient.create({
+    const patient = await this.prisma.patient.create({
       data: {
         anonymousCode,
         namePatient: dto.namePatient.trim(),
@@ -27,6 +30,8 @@ export class PatientsService {
         residenceZoneId: dto.residenceZoneId,
       },
     });
+    this.logger.log(`Patient créé #${patient.id} (${anonymousCode})`);
+    return patient;
   }
 
   list() {
@@ -68,7 +73,7 @@ export class PatientsService {
       throw new NotFoundException('Patient introuvable.');
     }
 
-    return this.prisma.patient.update({
+    const updated = await this.prisma.patient.update({
       where: { id },
       data: {
         ...(dto.namePatient !== undefined
@@ -78,14 +83,14 @@ export class PatientsService {
         ...(dto.gender !== undefined ? { gender: dto.gender } : {}),
       },
     });
+    this.logger.log(
+      `Patient #${id} modifié par user #${user.id} (${updated.anonymousCode})`,
+    );
+    return updated;
   }
 
   async remove(user: AuthenticatedUser, id: number) {
-    if (user.role !== ROLES.ADMINISTRATEUR) {
-      throw new ForbiddenException(
-        'Seul un administrateur peut supprimer un patient.',
-      );
-    }
+    await this.ensurePatientAccess(user, id);
 
     const existing = await this.prisma.patient.findUnique({ where: { id } });
     if (!existing) {
@@ -95,14 +100,14 @@ export class PatientsService {
     const casCount = await this.prisma.casEpidemiologique.count({
       where: { patientId: id },
     });
-    if (casCount > 0) {
-      throw new ConflictException(
-        `Impossible de supprimer ce patient : ${casCount} cas épidémiologique(s) lui sont associé(s).`,
-      );
-    }
 
+    // Suppression en cascade : les cas associés (et leurs analyses) sont
+    // supprimés via la contrainte ON DELETE CASCADE de la base.
     await this.prisma.patient.delete({ where: { id } });
-    return { deleted: true };
+    this.logger.log(
+      `Patient #${id} supprimé (cascade, ${casCount} cas) par user #${user.id}`,
+    );
+    return { deleted: true, cascadedCases: casCount };
   }
 
   private async ensurePatientAccess(

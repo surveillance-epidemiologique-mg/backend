@@ -14,6 +14,10 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { SetUserStatusDto } from './dto/set-user-status.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ROLES } from '../../common/constants/roles';
+import {
+  CurrentUser,
+  type AuthenticatedUser,
+} from '../../common/decorators/current-user.decorator';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -23,9 +27,15 @@ export class UsersController {
 
   @Roles(ROLES.ADMINISTRATEUR)
   @Post('invite')
-  @ApiOperation({ summary: 'Inviter un utilisateur (médecin ou laboratoire)' })
-  invite(@Body() dto: InviteUserDto) {
-    return this.usersService.invite(dto);
+  @ApiOperation({
+    summary:
+      'Inviter un utilisateur (médecin ou laboratoire), validé par le mot de passe de l’administrateur',
+  })
+  invite(
+    @CurrentUser('id') adminId: number,
+    @Body() dto: InviteUserDto,
+  ) {
+    return this.usersService.invite(adminId, dto);
   }
 
   @Roles(ROLES.ADMINISTRATEUR)

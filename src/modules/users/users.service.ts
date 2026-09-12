@@ -38,8 +38,32 @@ export class UsersService {
     private readonly emailService: EmailService,
   ) {}
 
-  async invite(dto: InviteUserDto) {
+  async invite(adminId: number, dto: InviteUserDto) {
     const email = dto.email.toLowerCase().trim();
+
+    // Validation : l'administrateur doit saisir son propre mot de passe
+    // pour confirmer la création du compte.
+    const admin = await this.prisma.utilisateur.findUnique({
+      where: { id: adminId },
+      select: { passwordHash: true, isActive: true },
+    });
+    if (!admin) {
+      throw new NotFoundException('Administrateur introuvable.');
+    }
+    if (!admin.isActive) {
+      throw new BadRequestException(
+        'Votre compte est désactivé. Création impossible.',
+      );
+    }
+    const passwordValid = await bcrypt.compare(
+      dto.adminPassword ?? '',
+      admin.passwordHash,
+    );
+    if (!passwordValid) {
+      throw new BadRequestException(
+        'Mot de passe de validation incorrect.',
+      );
+    }
 
     const existing = await this.prisma.utilisateur.findUnique({
       where: { email },

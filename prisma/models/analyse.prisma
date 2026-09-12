@@ -1,0 +1,20 @@
+model Analyse {
+  id           Int                @id @default(autoincrement()) @map("id_analyse")
+  casId        Int                @map("id_cas")
+  label        String             @map("label_analyse") @db.VarChar(150)
+  resultType   TypeResultatAttendu @map("type_resultat_attendu")
+  resultat     String?            @map("resultat") @db.Text
+  statut       StatutAnalyse      @default(Demandee) @map("statut_analyse")
+  laboratoryId Int?               @map("id_laboratoire")
+  dateAnalyse  DateTime?          @map("date_analyse") @db.Timestamptz(3)
+  dateDemande  DateTime           @default(now()) @map("date_demande") @db.Timestamptz(3)
+
+  cas        CasEpidemiologique @relation(fields: [casId], references: [id], onDelete: Cascade)
+  laboratory Utilisateur?      @relation("AnalyseLaboratoire", fields: [laboratoryId], references: [id], onDelete: SetNull)
+  decisionPourCas CasEpidemiologique[] @relation("CasDecisionAnalyse")
+
+  @@index([casId], map: "idx_analyses_cas")
+  @@index([laboratoryId], map: "idx_analyses_laboratoire")
+  @@index([statut], map: "idx_analyses_statut")
+  @@map("analyses")
+}

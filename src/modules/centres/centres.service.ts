@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
+import { TtlCache } from '../../common/cache/ttl-cache';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CreateCentreDto } from './dto/create-centre.dto';
 import { UpdateCentreDto } from './dto/update-centre.dto';
@@ -10,19 +11,38 @@ const centreWithZoneArgs = {
 
 @Injectable()
 export class CentresService {
+  private readonly listCache = new TtlCache<ReturnType<typeof this.list>>(
+    60_000,
+  );
+  private readonly zonesCache = new TtlCache<
+    ReturnType<typeof this.listZones>
+  >(300_000);
+
   constructor(private readonly prisma: PrismaService) {}
 
   list() {
-    return this.prisma.centreSante.findMany({
+    const cached = this.listCache.get('all');
+    if (cached) {
+      return cached;
+    }
+    const data = this.prisma.centreSante.findMany({
       ...centreWithZoneArgs,
       orderBy: { name: 'asc' },
     });
+    this.listCache.set('all', data);
+    return data;
   }
 
   listZones() {
-    return this.prisma.zoneAdministrative.findMany({
+    const cached = this.zonesCache.get('all');
+    if (cached) {
+      return cached;
+    }
+    const data = this.prisma.zoneAdministrative.findMany({
       orderBy: { name: 'asc' },
     });
+    this.zonesCache.set('all', data);
+    return data;
   }
 
   async create(dto: CreateCentreDto) {
@@ -33,6 +53,7 @@ export class CentresService {
       throw new NotFoundException('Zone introuvable.');
     }
 
+    this.listCache.clear();
     return this.prisma.centreSante.create({
       data: {
         name: dto.name.trim(),
@@ -76,6 +97,7 @@ export class CentresService {
     if (dto.longitude !== undefined) {
       data.longitude = dto.longitude;
     }
+    this.listCache.clear();
     return this.prisma.centreSante.update({
       where: { id },
       data,

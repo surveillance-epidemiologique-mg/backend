@@ -1,20 +1,32 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../../generated/prisma/client';
+import { TtlCache } from '../../common/cache/ttl-cache';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CreateMaladieDto } from './dto/create-maladie.dto';
 import { UpdateMaladieDto } from './dto/update-maladie.dto';
 
 @Injectable()
 export class MaladiesService {
+  private readonly listCache = new TtlCache<ReturnType<typeof this.list>>(
+    60_000,
+  );
+
   constructor(private readonly prisma: PrismaService) {}
 
   list() {
-    return this.prisma.maladie.findMany({
+    const cached = this.listCache.get('all');
+    if (cached) {
+      return cached;
+    }
+    const data = this.prisma.maladie.findMany({
       orderBy: { name: 'asc' },
     });
+    this.listCache.set('all', data);
+    return data;
   }
 
   create(dto: CreateMaladieDto) {
+    this.listCache.clear();
     return this.prisma.maladie.create({
       data: {
         name: dto.name.trim(),
@@ -46,6 +58,7 @@ export class MaladiesService {
       data.description = dto.description;
     }
 
+    this.listCache.clear();
     return this.prisma.maladie.update({ where: { id }, data });
   }
 }

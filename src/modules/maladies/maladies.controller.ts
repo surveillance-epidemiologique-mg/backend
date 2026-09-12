@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Patch,
@@ -21,6 +22,7 @@ export class MaladiesController {
   constructor(private readonly maladiesService: MaladiesService) {}
 
   @Get()
+  @Header('Cache-Control', 'public, max-age=60')
   @ApiOperation({ summary: 'Lister les maladies du dictionnaire' })
   list() {
     return this.maladiesService.list();

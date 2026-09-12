@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
+  IsEnum,
   IsIn,
   IsInt,
   IsObject,
@@ -10,7 +12,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { StatutDiag } from '../../../../generated/prisma/client';
+import { StatutDiag, TypeResultatAttendu } from '../../../../generated/prisma/client';
 
 export class NewPatientDto {
   @ApiProperty({ description: 'Nom du patient (anonymisé)', example: 'Patient 01' })
@@ -30,6 +32,25 @@ export class NewPatientDto {
   @IsOptional()
   @IsIn(['M', 'F'])
   gender?: string;
+}
+
+export class CreateAnalyseInCaseDto {
+  @ApiProperty({
+    description: "Libellé de l'analyse demandée",
+    example: 'Test rapide paludisme',
+  })
+  @IsString()
+  @MinLength(2, {
+    message: "Le libellé de l'analyse doit contenir au moins 2 caractères.",
+  })
+  label!: string;
+
+  @ApiProperty({
+    description: 'Type de résultat attendu',
+    enum: TypeResultatAttendu,
+  })
+  @IsEnum(TypeResultatAttendu, { message: 'Type de résultat invalide.' })
+  typeResultatAttendu!: TypeResultatAttendu;
 }
 
 export class CreateCaseDto {
@@ -72,4 +93,14 @@ export class CreateCaseDto {
   @IsOptional()
   @IsString()
   symptoms?: string;
+
+  @ApiPropertyOptional({
+    description: 'Analyses demandées lors de la déclaration',
+    type: [CreateAnalyseInCaseDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateAnalyseInCaseDto)
+  analyses?: CreateAnalyseInCaseDto[];
 }

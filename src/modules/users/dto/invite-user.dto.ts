@@ -45,4 +45,14 @@ export class InviteUserDto {
   @IsOptional()
   @IsString()
   phoneNumber?: string;
+
+  @ApiProperty({
+    description:
+      'Mot de passe de l’administrateur (validation obligatoire de la création)',
+  })
+  @IsString()
+  @MinLength(1, {
+    message: 'Le mot de passe de validation est requis.',
+  })
+  adminPassword!: string;
 }

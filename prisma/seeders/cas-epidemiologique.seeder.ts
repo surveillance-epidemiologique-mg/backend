@@ -1,7 +1,9 @@
 import { Prisma } from "../../generated/prisma/client";
 import {
   IssueClinique,
+  StatutAnalyse,
   StatutDiag,
+  TypeResultatAttendu,
 } from "../../generated/prisma/enums";
 
 interface CasSeed {
@@ -82,12 +84,28 @@ export async function seedCasEpidemiologiques(
         agentId: admin.id,
         diagnosticStatus: cas.diagnosticStatus,
         clinicalOutcome: cas.clinicalOutcome,
-        labResult: cas.labResult,
         diagnosisDate,
         declarationDate,
         symptoms: cas.symptoms,
       },
     });
+
+    // Résultat initial : on alimente la table `analyses` (les colonnes
+    // dépréciées `resultat_labo`/`date_analyse`/`id_laboratoire` du cas ne
+    // sont plus utilisées).
+    if (cas.labResult) {
+      await prisma.analyse.create({
+        data: {
+          casId: created.id,
+          label: "Analyse initiale",
+          resultType: TypeResultatAttendu.TexteLibre,
+          resultat: cas.labResult,
+          statut: StatutAnalyse.Realisee,
+          laboratoryId: admin.id,
+          dateAnalyse: declarationDate,
+        },
+      });
+    }
 
     if (centre.latitude != null && centre.longitude != null) {
       await prisma.$executeRaw`

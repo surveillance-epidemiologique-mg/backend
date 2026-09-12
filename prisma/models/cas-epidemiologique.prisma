@@ -5,6 +5,7 @@ model CasEpidemiologique {
   centreId     Int  @map("id_centre")
   agentId      Int  @map("id_agent")
   laboratoryId Int? @map("id_laboratoire")
+  decisionAnalyseId Int? @map("id_analyse_decision")
 
   diagnosticStatus StatutDiag    @default(Suspect) @map("statut_diagnostic")
   clinicalOutcome  IssueClinique @default(EnCours) @map("issue_clinique")
@@ -25,9 +26,15 @@ model CasEpidemiologique {
   centre     CentreSante  @relation(fields: [centreId], references: [id], onDelete: Restrict)
   agent      Utilisateur  @relation("CasAgent", fields: [agentId], references: [id], onDelete: Restrict)
   laboratory Utilisateur? @relation("CasLaboratoire", fields: [laboratoryId], references: [id], onDelete: SetNull)
+  decisionAnalyse Analyse? @relation("CasDecisionAnalyse", fields: [decisionAnalyseId], references: [id], onDelete: SetNull)
 
+  analyses      Analyse[]
   notifications Notification[]
 
+  @@index([patientId], map: "idx_cas_patient")
+  @@index([centreId], map: "idx_cas_centre")
+  @@index([agentId], map: "idx_cas_agent")
+  @@index([maladieId], map: "idx_cas_maladie")
   @@index([diagnosisDate], map: "idx_cas_dates")
   @@index([diagnosticStatus, clinicalOutcome], map: "idx_cas_diag_issue")
   @@map("cas_epidemiologiques")

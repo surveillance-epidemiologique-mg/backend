@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { StatutAlerte, StatutDiag } from '../../../generated/prisma/client';
+import { TtlCache } from '../../common/cache/ttl-cache';
 import { ROLES } from '../../common/constants/roles';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../core/prisma/prisma.service';
@@ -24,6 +25,11 @@ const GRAVITE_RANK: Record<string, number> = {
 
 @Injectable()
 export class CarteService {
+  private readonly zonesCache = new TtlCache<GeoJsonCollection>(30_000);
+  private readonly centresCache = new TtlCache<GeoJsonCollection>(300_000);
+  private readonly alertesCache = new TtlCache<GeoJsonCollection>(30_000);
+  private readonly clustersCache = new TtlCache<GeoJsonCollection>(60_000);
+
   constructor(private readonly prisma: PrismaService) {}
 
   private collection(features: GeoJsonFeature[]): GeoJsonCollection {
@@ -57,6 +63,10 @@ export class CarteService {
    * (coloration) ainsi que les détails de l'alerte la plus grave.
    */
   async zonesGeoJson(): Promise<GeoJsonCollection> {
+    const cached = this.zonesCache.get('all');
+    if (cached) {
+      return cached;
+    }
     const rows = await this.prisma.$queryRaw<
       { id_zone: number; nom_zone: string; type_zone: string; geojson: string | null }[]
     >`
@@ -129,11 +139,17 @@ export class CarteService {
         },
       });
     }
-    return this.collection(features);
+    const result = this.collection(features);
+    this.zonesCache.set('all', result);
+    return result;
   }
 
   /** Couche "Centres de santé" (marqueurs). */
   async centresGeoJson(): Promise<GeoJsonCollection> {
+    const cached = this.centresCache.get('all');
+    if (cached) {
+      return cached;
+    }
     const rows = await this.prisma.$queryRaw<
       {
         id_centre: number;
@@ -169,11 +185,17 @@ export class CarteService {
         },
       });
     }
-    return this.collection(features);
+    const result = this.collection(features);
+    this.centresCache.set('all', result);
+    return result;
   }
 
   /** Couche "Alertes" actives (polygones colorés selon niveau de gravité). */
   async alertesGeoJson(): Promise<GeoJsonCollection> {
+    const cached = this.alertesCache.get('all');
+    if (cached) {
+      return cached;
+    }
     const rows = await this.prisma.$queryRaw<
       {
         id_alerte: number;
@@ -216,7 +238,9 @@ export class CarteService {
         },
       });
     }
-    return this.collection(features);
+    const result = this.collection(features);
+    this.alertesCache.set('all', result);
+    return result;
   }
 
   /**
@@ -281,6 +305,10 @@ export class CarteService {
    * La localisation des cas est approchée par celle de leur centre de santé.
    */
   async clustersGeoJson(): Promise<GeoJsonCollection> {
+    const cached = this.clustersCache.get('all');
+    if (cached) {
+      return cached;
+    }
     const eps = Number(process.env.CLUSTER_EPS ?? 0.35);
     const rows = await this.prisma.$queryRaw<
       { cluster_id: number | null; nb: number; geojson: string | null }[]
@@ -313,6 +341,8 @@ export class CarteService {
         properties: { cluster: r.cluster_id, nb: r.nb },
       });
     }
-    return this.collection(features);
+    const result = this.collection(features);
+    this.clustersCache.set('all', result);
+    return result;
   }
 }

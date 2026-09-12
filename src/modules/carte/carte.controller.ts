@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Header, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { StatutDiag } from '../../../generated/prisma/client';
 import { CarteService } from './carte.service';
@@ -17,6 +17,7 @@ export class CarteController {
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('zones')
+  @Header('Cache-Control', 'public, max-age=30')
   @ApiOperation({ summary: 'Limites administratives (GeoJSON)' })
   zones() {
     return this.carteService.zonesGeoJson();
@@ -24,6 +25,7 @@ export class CarteController {
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('centres')
+  @Header('Cache-Control', 'public, max-age=60')
   @ApiOperation({ summary: 'Centres de santé (GeoJSON points)' })
   centres() {
     return this.carteService.centresGeoJson();
@@ -31,6 +33,7 @@ export class CarteController {
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('alertes')
+  @Header('Cache-Control', 'public, max-age=30')
   @ApiOperation({ summary: 'Alertes actives (GeoJSON polygones)' })
   alertes() {
     return this.carteService.alertesGeoJson();
@@ -56,6 +59,7 @@ export class CarteController {
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('clusters')
+  @Header('Cache-Control', 'public, max-age=60')
   @ApiOperation({ summary: 'Clusters de cas (GeoJSON points)' })
   clusters() {
     return this.carteService.clustersGeoJson();

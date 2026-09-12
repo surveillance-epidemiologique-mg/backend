@@ -21,8 +21,9 @@ model Utilisateur {
   role   Role         @relation(fields: [roleId], references: [id], onDelete: Restrict)
   centre CentreSante? @relation(fields: [centreId], references: [id], onDelete: SetNull)
 
-  casDeclares   CasEpidemiologique[] @relation("CasAgent")
-  casAnalyses   CasEpidemiologique[] @relation("CasLaboratoire")
+casDeclares  CasEpidemiologique[] @relation("CasAgent")
+  casAnalyses  CasEpidemiologique[] @relation("CasLaboratoire")
+  analyses     Analyse[]            @relation("AnalyseLaboratoire")
   notifications Notification[]
 
   @@map("utilisateurs")

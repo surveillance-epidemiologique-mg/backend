@@ -51,3 +51,18 @@ enum StatutAlerte {
 
   @@map("statut_alerte_enum")
 }
+
+enum TypeResultatAttendu {
+  Numerique @map("Numerique")
+  ChoixPositifNegatif @map("Choix_Positif_Negatif")
+  TexteLibre @map("Texte_libre")
+
+  @@map("type_resultat_attendu_enum")
+}
+
+enum StatutAnalyse {
+  Demandee @map("Demandee")
+  Realisee @map("Realisee")
+
+  @@map("statut_analyse_enum")
+}

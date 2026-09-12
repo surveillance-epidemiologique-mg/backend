@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Patch,
@@ -21,6 +22,7 @@ export class CentresController {
   constructor(private readonly centresService: CentresService) {}
 
   @Get()
+  @Header('Cache-Control', 'public, max-age=60')
   @ApiOperation({ summary: 'Lister les centres de santé' })
   list() {
     return this.centresService.list();
@@ -28,6 +30,7 @@ export class CentresController {
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('zones')
+  @Header('Cache-Control', 'public, max-age=60')
   @ApiOperation({ summary: 'Lister les zones administratives' })
   listZones() {
     return this.centresService.listZones();
