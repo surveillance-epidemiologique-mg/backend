@@ -1,8 +1,12 @@
-import { Injectable, Logger, OnModuleInit, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Injectable,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
-import { lookup } from 'node:dns/promises';
 
 export interface WelcomeMailData {
   to: string;
@@ -54,12 +58,15 @@ export class EmailService implements OnModuleInit {
     const user = this.configService.get<string>('smtp.user');
     const pass = this.configService.get<string>('smtp.pass');
     const port = this.configService.get<number>('smtp.port') ?? 587;
-    const secure = this.configService.get<boolean>('smtp.secure') ?? false;
+    // Sécurisation implicite : le port 465 implique TLS direct ; sinon STARTTLS.
+    const secure =
+      this.configService.get<boolean>('smtp.secure') ?? port === 465;
 
     this.transporter = nodemailer.createTransport({
       host,
       port,
       secure,
+      requireTLS: !secure,
       auth: user && pass ? { user, pass: pass.replace(/\s+/g, '') } : undefined,
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
@@ -67,8 +74,34 @@ export class EmailService implements OnModuleInit {
     });
 
     this.logger.log(
-      `Transport SMTP initialisé pour ${host} — EMAIL_MODE=smtp.`,
+      `Transport SMTP initialisé pour ${host}:${port} (secure=${secure}) — EMAIL_MODE=smtp.`,
     );
+
+    // En production, les liens d'activation doivent pointer vers le bon domaine.
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    if (!frontendUrl || frontendUrl.includes('localhost')) {
+      this.logger.warn(
+        "FRONTEND_URL n'est pas défini ou pointe vers localhost : les liens d'activation dans les e-mails seront incorrects en production.",
+      );
+    }
+
+    // Diagnostic au démarrage : vérifie la connexion SMTP sans bloquer le boot.
+    void this.transporter
+      .verify()
+      .then(() =>
+        this.logger.log(
+          `Connexion SMTP vérifiée avec succès pour ${host}:${port}.`,
+        ),
+      )
+      .catch((error: unknown) => {
+        const raw =
+          error instanceof Error ? error.message : String(error);
+        this.logger.error(
+          `Connexion SMTP impossible pour ${host}:${port} — ${raw}. ` +
+            'Vérifiez SMTP_HOST/SMTP_PORT/SMTP_SECURE/SMTP_USER/SMTP_PASS. ' +
+            'Les e-mails échoueront tant que la connexion SMTP ne fonctionne pas.',
+        );
+      });
   }
 
   async sendWelcomeEmail(data: WelcomeMailData): Promise<void> {
@@ -193,9 +226,11 @@ export class EmailService implements OnModuleInit {
         return;
       } catch (error) {
         const rawError = error instanceof Error ? error.message : String(error);
-        this.logger.error(`Échec de l'envoi SMTP vers ${mail.to}: ${rawError}`);
-        throw new InternalServerErrorException(
-          `DÉBOGAGE SMTP - Échec de l'envoi vers ${mail.to}. Erreur brute: ${rawError}`
+        this.logger.error(
+          `Échec de l'envoi SMTP vers ${mail.to} (sujet: ${mail.subject}): ${rawError}`,
+        );
+        throw new BadGatewayException(
+          `Impossible d'envoyer l'e-mail vers ${mail.to} : le serveur SMTP est injoignable ou a rejeté la connexion. Vérifiez la configuration SMTP.`,
         );
       }
     }
