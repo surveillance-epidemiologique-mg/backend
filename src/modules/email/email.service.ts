@@ -56,21 +56,18 @@ export class EmailService implements OnModuleInit {
     const port = this.configService.get<number>('smtp.port') ?? 587;
     const secure = this.configService.get<boolean>('smtp.secure') ?? false;
 
-    const resolvedHost = await this.resolveIpv4(host);
-
     this.transporter = nodemailer.createTransport({
-      host: resolvedHost,
+      host,
       port,
       secure,
-      tls: { servername: host },
-      auth: user && pass ? { user, pass } : undefined,
+      auth: user && pass ? { user, pass: pass.replace(/\s+/g, '') } : undefined,
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
       socketTimeout: 15_000,
     });
 
     this.logger.log(
-      `Transport SMTP initialisé pour ${host} (${resolvedHost}) — EMAIL_MODE=smtp.`,
+      `Transport SMTP initialisé pour ${host} — EMAIL_MODE=smtp.`,
     );
   }
 
@@ -215,17 +212,5 @@ export class EmailService implements OnModuleInit {
     const from =
       this.configService.get<string>('smtp.from') ?? 'no-reply@surveillance.mg';
     return fromName ? `"${fromName}" <${from}>` : from;
-  }
-
-  private async resolveIpv4(host: string): Promise<string> {
-    try {
-      const { address } = await lookup(host, { family: 4 });
-      return address;
-    } catch {
-      this.logger.warn(
-        `Résolution IPv4 échouée pour ${host}, utilisation du nom d'hôte d'origine.`,
-      );
-      return host;
-    }
   }
 }
