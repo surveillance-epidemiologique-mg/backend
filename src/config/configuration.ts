@@ -20,6 +20,10 @@ export default () => ({
     secure: process.env.SMTP_SECURE === 'true',
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
+    // Version IP pour la connexion SMTP : 4 (IPv4), 6 (IPv6), 0 (auto).
+    // Par défaut 4 : évite l'échec ENETUNREACH quand le serveur n'a pas de
+    // route IPv6 (ex: Gmail résolu en AAAA mais IPv6 indisponible).
+    family: parseInt(process.env.SMTP_FAMILY ?? '4', 10),
     from: process.env.MAIL_FROM ?? 'no-reply@surveillance.mg',
     fromName:
       process.env.MAIL_FROM_NAME ?? 'Surveillance Epidemiologique Madagascar',

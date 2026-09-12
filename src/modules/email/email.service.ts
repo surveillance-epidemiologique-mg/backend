@@ -61,12 +61,15 @@ export class EmailService implements OnModuleInit {
     // Sécurisation implicite : le port 465 implique TLS direct ; sinon STARTTLS.
     const secure =
       this.configService.get<boolean>('smtp.secure') ?? port === 465;
+    // Forcer IPv4 par défaut (évite ENETUNREACH si le serveur n'a pas de route IPv6).
+    const family = this.configService.get<number>('smtp.family') ?? 4;
 
     this.transporter = nodemailer.createTransport({
       host,
       port,
       secure,
       requireTLS: !secure,
+      ...(family === 0 ? {} : { family }),
       auth: user && pass ? { user, pass: pass.replace(/\s+/g, '') } : undefined,
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
@@ -74,7 +77,7 @@ export class EmailService implements OnModuleInit {
     });
 
     this.logger.log(
-      `Transport SMTP initialisé pour ${host}:${port} (secure=${secure}) — EMAIL_MODE=smtp.`,
+      `Transport SMTP initialisé pour ${host}:${port} (secure=${secure}, family=${family === 0 ? 'auto' : family}) — EMAIL_MODE=smtp.`,
     );
 
     // En production, les liens d'activation doivent pointer vers le bon domaine.
