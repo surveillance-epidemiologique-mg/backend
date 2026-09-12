@@ -118,7 +118,7 @@ export class UsersService {
     });
 
     const frontendUrl =
-      this.configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+      this.configService.get<string>('frontendUrl') ?? 'http://localhost:3000';
     const activationLink = `${frontendUrl}/activate?token=${resetToken}`;
 
     try {

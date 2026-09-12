@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
@@ -31,7 +31,7 @@ export class EmailService implements OnModuleInit {
   private transporter: Transporter | null = null;
   private mode: EmailMode = 'simulation';
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) { }
 
   async onModuleInit(): Promise<void> {
     const requested = (
@@ -196,11 +196,12 @@ export class EmailService implements OnModuleInit {
         return;
       } catch (error) {
         this.logger.error(
-          `Échec de l'envoi SMTP vers ${mail.to}: ${
-            error instanceof Error ? error.message : String(error)
+          `Échec de l'envoi SMTP vers ${mail.to}: ${error instanceof Error ? error.message : String(error)
           }`,
         );
-        throw new Error(`Échec de l'envoi de l'e-mail (SMTP) vers ${mail.to}.`);
+        throw new InternalServerErrorException(
+          `Échec de l'envoi de l'e-mail (SMTP) vers ${mail.to}. Veuillez réessayer plus tard ou contacter l'administrateur.`
+        );
       }
     }
 
