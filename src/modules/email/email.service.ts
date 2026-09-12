@@ -192,12 +192,10 @@ export class EmailService implements OnModuleInit {
         });
         return;
       } catch (error) {
-        this.logger.error(
-          `Échec de l'envoi SMTP vers ${mail.to}: ${error instanceof Error ? error.message : String(error)
-          }`,
-        );
+        const rawError = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Échec de l'envoi SMTP vers ${mail.to}: ${rawError}`);
         throw new InternalServerErrorException(
-          `Échec de l'envoi de l'e-mail (SMTP) vers ${mail.to}. Veuillez réessayer plus tard ou contacter l'administrateur.`
+          `DÉBOGAGE SMTP - Échec de l'envoi vers ${mail.to}. Erreur brute: ${rawError}`
         );
       }
     }
