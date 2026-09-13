@@ -7,6 +7,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 export interface WelcomeMailData {
   to: string;
@@ -35,7 +37,7 @@ export class EmailService implements OnModuleInit {
   private transporter: Transporter | null = null;
   private mode: EmailMode = 'simulation';
 
-  constructor(private readonly configService: ConfigService) { }
+  constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit(): Promise<void> {
     const requested = (
@@ -61,15 +63,19 @@ export class EmailService implements OnModuleInit {
     // Sécurisation implicite : le port 465 implique TLS direct ; sinon STARTTLS.
     const secure =
       this.configService.get<boolean>('smtp.secure') ?? port === 465;
-    // Forcer IPv4 par défaut (évite ENETUNREACH si le serveur n'a pas de route IPv6).
+    // nodemailer ignore l'option `family` : on résout donc nous-mêmes le nom
+    // d'hôte en IPv4 (par défaut) pour éviter ENETUNREACH si le serveur n'a
+    // pas de route IPv6. Le nom d'origine est conservé pour le SNI TLS.
     const family = this.configService.get<number>('smtp.family') ?? 4;
 
+    const resolvedHost = await this.resolveHost(host, family);
+
     this.transporter = nodemailer.createTransport({
-      host,
+      host: resolvedHost,
       port,
       secure,
       requireTLS: !secure,
-      ...(family === 0 ? {} : { family }),
+      tls: { servername: host },
       auth: user && pass ? { user, pass: pass.replace(/\s+/g, '') } : undefined,
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
@@ -97,8 +103,7 @@ export class EmailService implements OnModuleInit {
         ),
       )
       .catch((error: unknown) => {
-        const raw =
-          error instanceof Error ? error.message : String(error);
+        const raw = error instanceof Error ? error.message : String(error);
         this.logger.error(
           `Connexion SMTP impossible pour ${host}:${port} — ${raw}. ` +
             'Vérifiez SMTP_HOST/SMTP_PORT/SMTP_SECURE/SMTP_USER/SMTP_PASS. ' +
@@ -248,5 +253,21 @@ export class EmailService implements OnModuleInit {
     const from =
       this.configService.get<string>('smtp.from') ?? 'no-reply@surveillance.mg';
     return fromName ? `"${fromName}" <${from}>` : from;
+  }
+
+  private async resolveHost(host: string, family: number): Promise<string> {
+    if (family === 0 || isIP(host)) {
+      return host;
+    }
+    const targetFamily = family === 6 ? 6 : 4;
+    try {
+      const { address } = await lookup(host, { family: targetFamily });
+      return address;
+    } catch {
+      this.logger.warn(
+        `Résolution IPv${targetFamily} échouée pour ${host}, utilisation du nom d'hôte d'origine.`,
+      );
+      return host;
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { StatutAlerte, StatutDiag } from '../../../generated/prisma/client';
 import { TtlCache } from '../../common/cache/ttl-cache';
 import { ROLES } from '../../common/constants/roles';
@@ -275,7 +275,13 @@ export class CarteService {
         diagnosticStatus: true,
         patient: { select: { anonymousCode: true } },
         maladie: { select: { name: true } },
-        centre: { select: { id: true, name: true } },
+        centre: {
+          select: {
+            id: true,
+            name: true,
+            zone: { select: { name: true } },
+          },
+        },
       },
     });
 
@@ -293,6 +299,7 @@ export class CarteService {
           code: c.patient.anonymousCode,
           maladie: c.maladie.name,
           centre: c.centre.name,
+          zone: c.centre.zone?.name ?? null,
           statut: c.diagnosticStatus,
         },
       });
@@ -344,5 +351,75 @@ export class CarteService {
     const result = this.collection(features);
     this.clustersCache.set('all', result);
     return result;
+  }
+
+  /**
+   * Résumé contextuel d'une zone administrative (panneau d'information de la carte) :
+   * centres de santé, alertes actives et comptage des cas.
+   */
+  async zoneSummary(zoneId: number) {
+    const zone = await this.prisma.zoneAdministrative.findUnique({
+      where: { id: zoneId },
+      select: { id: true, name: true, type: true },
+    });
+    if (!zone) {
+      throw new NotFoundException('Zone introuvable.');
+    }
+
+    const centres = await this.prisma.centreSante.findMany({
+      where: { zoneId },
+      select: { id: true, name: true, type: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const cas = await this.prisma.casEpidemiologique.findMany({
+      where: { centre: { zoneId } },
+      select: { diagnosticStatus: true },
+    });
+    const casTotal = cas.length;
+    const casConfirmes = cas.filter(
+      (c) => c.diagnosticStatus === StatutDiag.Confirme,
+    ).length;
+
+    const alertes = await this.prisma.alerte.findMany({
+      where: { zoneId, statutAlerte: StatutAlerte.Active },
+      select: {
+        niveauGravite: true,
+        detectedCaseCount: true,
+        maladie: { select: { name: true } },
+      },
+    });
+
+    const GRAVITE_RANK: Record<string, number> = {
+      Faible: 1,
+      Modere: 2,
+      Eleve: 3,
+      Critique: 4,
+    };
+    let alerte: {
+      gravite: string;
+      maladie: string;
+      cas: number;
+    } | null = null;
+    for (const a of alertes) {
+      if (!alerte || (GRAVITE_RANK[a.niveauGravite] ?? 0) > (GRAVITE_RANK[alerte.gravite] ?? 0)) {
+        alerte = {
+          gravite: a.niveauGravite,
+          maladie: a.maladie.name,
+          cas: a.detectedCaseCount,
+        };
+      }
+    }
+
+    return {
+      zoneId: zone.id,
+      nom: zone.name,
+      type: zone.type,
+      centreCount: centres.length,
+      centres,
+      casTotal,
+      casConfirmes,
+      alerte,
+    };
   }
 }

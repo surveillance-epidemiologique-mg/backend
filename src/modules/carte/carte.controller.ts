@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Query } from '@nestjs/common';
+import { Controller, Get, Header, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { StatutDiag } from '../../../generated/prisma/client';
 import { CarteService } from './carte.service';
@@ -55,6 +55,15 @@ export class CarteController {
       statut,
       maladieId ? Number(maladieId) : undefined,
     );
+  }
+
+  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Get('zone/:id')
+  @ApiOperation({
+    summary: 'Résumé contextuel d’une zone (centres, alertes, comptage des cas)',
+  })
+  zoneSummary(@Param('id', ParseIntPipe) id: number) {
+    return this.carteService.zoneSummary(id);
   }
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)

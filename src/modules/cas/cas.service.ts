@@ -271,10 +271,19 @@ export class CasService {
   ) {
     const where = this.buildCasWhere(query);
     delete where.diagnosticStatus;
-    where.OR = [
-      { diagnosticStatus: StatutDiag.Suspect },
-      { analyses: { some: { laboratoryId: user.id } } },
-    ];
+
+    if (user.role !== ROLES.ADMINISTRATEUR) {
+      // Agent Laboratoire : cas en attente (Suspect) + cas déjà traités qu'il a
+      // lui-même confirmés/invalidés (décision portée par une de ses analyses).
+      where.OR = [
+        { diagnosticStatus: StatutDiag.Suspect },
+        {
+          diagnosticStatus: { in: [StatutDiag.Confirme, StatutDiag.Invalide] },
+          decisionAnalyse: { laboratoryId: user.id },
+        },
+      ];
+    }
+    // Admin : tous les cas (en attente + traités), tous centres/laboratoires.
 
     return this.prisma.casEpidemiologique.findMany({
       where,
