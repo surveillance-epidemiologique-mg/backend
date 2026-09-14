@@ -11,6 +11,7 @@ import { Prisma, StatutAnalyse, StatutDiag, TypeResultatAttendu } from '../../..
 import { ROLES } from '../../common/constants/roles';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import { CreateCaseDto } from './dto/create-case.dto';
 import { CreateAnalyseDto } from './dto/create-analyse.dto';
 import {
@@ -43,7 +44,10 @@ const analyseInclude = {
 export class CasService {
   private readonly logger = new Logger(CasService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+  ) {}
 
   async declare(user: AuthenticatedUser, dto: CreateCaseDto) {
     const isMedecin = user.role === ROLES.MEDECIN;
@@ -329,6 +333,13 @@ export class CasService {
       },
     });
 
+    await this.notifyMedecinByEmail(
+      existing.agentId,
+      id,
+      updated.maladie.name,
+      dto.diagnosticStatus,
+    );
+
     return updated;
   }
 
@@ -479,7 +490,46 @@ export class CasService {
       },
     });
 
+    await this.notifyMedecinByEmail(
+      cas.agentId,
+      casId,
+      cas.maladie.name,
+      dto.diagnosticStatus,
+    );
+
     return updated;
+  }
+
+  /**
+   * Notifie par e-mail le médecin prescripteur d'un résultat laboratoire.
+   * Non bloquant : un échec d'envoi est loggé sans casser le flux.
+   */
+  private async notifyMedecinByEmail(
+    medecinId: number,
+    casId: number,
+    maladie: string,
+    statut: StatutDiag,
+  ) {
+    try {
+      const medecin = await this.prisma.utilisateur.findUnique({
+        where: { id: medecinId },
+        select: { email: true, name: true },
+      });
+      if (!medecin?.email) {
+        return;
+      }
+      await this.emailService.sendLabResultNotification({
+        to: medecin.email,
+        medecinName: medecin.name,
+        casId,
+        maladie,
+        statut,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Notification e-mail non envoyée (cas #${casId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   async updateIssue(userId: number, id: number, dto: UpdateIssueDto) {

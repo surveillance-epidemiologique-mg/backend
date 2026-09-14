@@ -5,10 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
+import { Resend } from 'resend';
 
 export interface WelcomeMailData {
   to: string;
@@ -29,121 +26,127 @@ export interface ResetPasswordMailData {
   code: string;
 }
 
-type EmailMode = 'smtp' | 'simulation';
+export interface LabResultMailData {
+  to: string;
+  medecinName: string;
+  casId: number;
+  maladie: string;
+  statut: string;
+}
 
+/**
+ * Service d'envoi d'e-mails centralisé basé sur l'API Resend.
+ * La clé est lue depuis `RESEND_API_KEY` (jamais hardcodée).
+ */
 @Injectable()
 export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
-  private transporter: Transporter | null = null;
-  private mode: EmailMode = 'simulation';
+  private resend: Resend | null = null;
+  private from = '';
 
   constructor(private readonly configService: ConfigService) {}
 
-  async onModuleInit(): Promise<void> {
-    const requested = (
-      this.configService.get<string>('smtp.mode') ?? ''
-    ).toLowerCase();
-    const host = this.configService.get<string>('smtp.host');
-
-    // Mode simulation : aucun contact avec un serveur SMTP, affichage en console.
-    if (requested === 'simulation' || !host) {
-      this.mode = 'simulation';
-      this.logger.warn(
-        requested === 'smtp'
-          ? 'EMAIL_MODE=smtp mais SMTP_HOST est vide : bascule en mode SIMULATION.'
-          : 'EMAIL_MODE=simulation : aucun e-mail réel ne sera envoyé. Le contenu des e-mails est affiché dans la console du serveur (développement).',
+  onModuleInit(): void {
+    const apiKey = this.configService.get<string>('RESEND_API_KEY');
+    if (!apiKey) {
+      this.logger.error(
+        "RESEND_API_KEY non définie : les e-mails ne peuvent pas être envoyés. " +
+          'Configurez RESEND_API_KEY dans l’environnement.',
       );
       return;
     }
 
-    this.mode = 'smtp';
-    const user = this.configService.get<string>('smtp.user');
-    const pass = this.configService.get<string>('smtp.pass');
-    const port = this.configService.get<number>('smtp.port') ?? 587;
-    // Sécurisation implicite : le port 465 implique TLS direct ; sinon STARTTLS.
-    const secure =
-      this.configService.get<boolean>('smtp.secure') ?? port === 465;
-    // nodemailer ignore l'option `family` : on résout donc nous-mêmes le nom
-    // d'hôte en IPv4 (par défaut) pour éviter ENETUNREACH si le serveur n'a
-    // pas de route IPv6. Le nom d'origine est conservé pour le SNI TLS.
-    const family = this.configService.get<number>('smtp.family') ?? 4;
+    this.resend = new Resend(apiKey);
 
-    const resolvedHost = await this.resolveHost(host, family);
-
-    this.transporter = nodemailer.createTransport({
-      host: resolvedHost,
-      port,
-      secure,
-      requireTLS: !secure,
-      tls: { servername: host },
-      auth: user && pass ? { user, pass: pass.replace(/\s+/g, '') } : undefined,
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 15_000,
-    });
+    const fromRaw =
+      this.configService.get<string>('MAIL_FROM') ?? 'onboarding@resend.dev';
+    // Ex: "ÉpiSuivi <notifications@votredomaine.mg>" — le domaine doit être
+    // vérifié dans Resend ; onboarding@resend.dev est le domaine de test dev.
+    this.from = fromRaw.includes('<')
+      ? fromRaw
+      : `ÉpiSuivi <${fromRaw}>`;
 
     this.logger.log(
-      `Transport SMTP initialisé pour ${host}:${port} (secure=${secure}, family=${family === 0 ? 'auto' : family}) — EMAIL_MODE=smtp.`,
+      `Service d'e-mails initialisé (Resend) — expéditeur ${this.from}.`,
     );
-
-    // En production, les liens d'activation doivent pointer vers le bon domaine.
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
-    if (!frontendUrl || frontendUrl.includes('localhost')) {
-      this.logger.warn(
-        "FRONTEND_URL n'est pas défini ou pointe vers localhost : les liens d'activation dans les e-mails seront incorrects en production.",
-      );
-    }
-
-    // Diagnostic au démarrage : vérifie la connexion SMTP sans bloquer le boot.
-    void this.transporter
-      .verify()
-      .then(() =>
-        this.logger.log(
-          `Connexion SMTP vérifiée avec succès pour ${host}:${port}.`,
-        ),
-      )
-      .catch((error: unknown) => {
-        const raw = error instanceof Error ? error.message : String(error);
-        this.logger.error(
-          `Connexion SMTP impossible pour ${host}:${port} — ${raw}. ` +
-            'Vérifiez SMTP_HOST/SMTP_PORT/SMTP_SECURE/SMTP_USER/SMTP_PASS. ' +
-            'Les e-mails échoueront tant que la connexion SMTP ne fonctionne pas.',
-        );
-      });
   }
 
   async sendWelcomeEmail(data: WelcomeMailData): Promise<void> {
-    const subject =
-      'Bienvenue sur la plateforme de surveillance épidémiologique';
-    const html = this.renderWelcomeTemplate(data);
-
-    await this.dispatch({ to: data.to, subject, html });
-
-    this.logger.log(
-      `E-mail de bienvenue ${this.mode === 'smtp' ? 'envoyé' : 'simulé'} pour ${data.to} (mode ${this.mode}).`,
-    );
+    const subject = 'Bienvenue sur ÉpiSuivi — Activez votre compte';
+    await this.send({ to: data.to, subject, html: this.renderWelcomeTemplate(data) });
+    this.logger.log(`E-mail de bienvenue envoyé (Resend) pour ${data.to}.`);
   }
 
   async sendActivationEmail(data: ActivationMailData): Promise<void> {
     const subject = 'Bienvenue sur ÉpiSuivi — Activez votre compte';
-    const html = this.renderActivationTemplate(data);
-
-    await this.dispatch({ to: data.to, subject, html });
-
-    this.logger.log(
-      `E-mail d'activation ${this.mode === 'smtp' ? 'envoyé' : 'simulé'} pour ${data.to} (mode ${this.mode}).`,
-    );
+    await this.send({ to: data.to, subject, html: this.renderActivationTemplate(data) });
+    this.logger.log(`E-mail d'activation envoyé (Resend) pour ${data.to}.`);
   }
 
   async sendPasswordResetEmail(data: ResetPasswordMailData): Promise<void> {
     const subject = 'Réinitialisation de votre mot de passe ÉpiSuivi';
-    const html = this.renderResetPasswordTemplate(data);
-
-    await this.dispatch({ to: data.to, subject, html });
-
+    await this.send({
+      to: data.to,
+      subject,
+      html: this.renderResetPasswordTemplate(data),
+    });
     this.logger.log(
-      `E-mail de réinitialisation ${this.mode === 'smtp' ? 'envoyé' : 'simulé'} pour ${data.to} (mode ${this.mode}).`,
+      `E-mail de réinitialisation envoyé (Resend) pour ${data.to}.`,
     );
+  }
+
+  async sendLabResultNotification(data: LabResultMailData): Promise<void> {
+    const subject = `Résultat du cas #${data.casId} — ÉpiSuivi`;
+    await this.send({
+      to: data.to,
+      subject,
+      html: this.renderLabResultTemplate(data),
+    });
+    this.logger.log(
+      `Notification de résultat envoyée (Resend) pour ${data.to} (cas #${data.casId}).`,
+    );
+  }
+
+  /**
+   * Envoie via Resend. En cas d'échec : log de l'erreur brute + exception
+   * explicite (les flux critiques ne renvoient pas un succès trompeur).
+   */
+  private async send(mail: {
+    to: string;
+    subject: string;
+    html: string;
+  }): Promise<void> {
+    if (!this.resend) {
+      throw new BadGatewayException(
+        "L'envoi d'e-mails est désactivé : RESEND_API_KEY n'est pas configurée.",
+      );
+    }
+
+    try {
+      const { data, error } = await this.resend.emails.send({
+        from: this.from,
+        to: mail.to,
+        subject: mail.subject,
+        html: mail.html,
+      });
+
+      if (error) {
+        throw new Error(
+          `Resend ${error.name ?? 'error'}: ${error.message ?? String(error)}`,
+        );
+      }
+      if (!data?.id) {
+        throw new Error('Resend : réponse sans identifiant d’envoi.');
+      }
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Échec de l'envoi Resend vers ${mail.to} (sujet: ${mail.subject}): ${raw}`,
+      );
+      throw new BadGatewayException(
+        `Impossible d'envoyer l'e-mail vers ${mail.to} : le service d'e-mails (Resend) a renvoyé une erreur. Vérifiez la clé API et le domaine de l'expéditeur.`,
+      );
+    }
   }
 
   private renderActivationTemplate({
@@ -214,60 +217,27 @@ export class EmailService implements OnModuleInit {
     `;
   }
 
-  /**
-   * Envoie un e-mail.
-   * - Mode SMTP : envoi réel ; en cas d'échec, une erreur est levée (l'appelant
-   *   sait que l'e-mail n'a PAS été envoyé — jamais de faux « envoyé »).
-   * - Mode simulation : aucun contact SMTP, le contenu est affiché dans la console.
-   */
-  private async dispatch(mail: {
-    to: string;
-    subject: string;
-    html: string;
-  }): Promise<void> {
-    if (this.mode === 'smtp' && this.transporter) {
-      try {
-        await this.transporter.sendMail({
-          from: this.buildFromAddress(),
-          ...mail,
-        });
-        return;
-      } catch (error) {
-        const rawError = error instanceof Error ? error.message : String(error);
-        this.logger.error(
-          `Échec de l'envoi SMTP vers ${mail.to} (sujet: ${mail.subject}): ${rawError}`,
-        );
-        throw new BadGatewayException(
-          `Impossible d'envoyer l'e-mail vers ${mail.to} : le serveur SMTP est injoignable ou a rejeté la connexion. Vérifiez la configuration SMTP.`,
-        );
-      }
-    }
-
-    this.logger.warn(
-      `[SIMULATION EMAIL] À: ${mail.to}\nSujet: ${mail.subject}\nContenu:\n${mail.html}`,
-    );
-  }
-
-  private buildFromAddress(): string {
-    const fromName = this.configService.get<string>('smtp.fromName');
-    const from =
-      this.configService.get<string>('smtp.from') ?? 'no-reply@surveillance.mg';
-    return fromName ? `"${fromName}" <${from}>` : from;
-  }
-
-  private async resolveHost(host: string, family: number): Promise<string> {
-    if (family === 0 || isIP(host)) {
-      return host;
-    }
-    const targetFamily = family === 6 ? 6 : 4;
-    try {
-      const { address } = await lookup(host, { family: targetFamily });
-      return address;
-    } catch {
-      this.logger.warn(
-        `Résolution IPv${targetFamily} échouée pour ${host}, utilisation du nom d'hôte d'origine.`,
-      );
-      return host;
-    }
+  private renderLabResultTemplate({
+    medecinName,
+    casId,
+    maladie,
+    statut,
+  }: LabResultMailData): string {
+    const label =
+      statut === 'Confirme' ? 'confirmé' : statut === 'Invalide' ? 'invalidé' : statut;
+    const color = statut === 'Confirme' ? '#16a34a' : statut === 'Invalide' ? '#dc2626' : '#2563eb';
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 8px;">
+        <h2 style="color: #2563eb; margin-top: 0;">Bonjour ${medecinName},</h2>
+        <p>Le laboratoire a rendu un résultat pour l'un de vos cas déclarés :</p>
+        <p style="text-align:center;">
+          <span style="display:inline-block; background:#eff6ff; color:${color}; padding:12px 24px; border-radius:8px; font-size:16px; font-weight:bold;">
+            Cas #${casId} · ${maladie} — ${label}
+          </span>
+        </p>
+        <p style="color:#6b7280; font-size: 13px;">Connectez-vous à la plateforme pour consulter le détail du cas et les analyses réalisées.</p>
+        <p style="color:#6b7280; font-size: 12px;">Cordialement,<br/>Équipe ÉpiSuivi</p>
+      </div>
+    `;
   }
 }
