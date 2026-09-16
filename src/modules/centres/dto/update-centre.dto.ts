@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   MinLength,
 } from 'class-validator';
@@ -26,9 +27,13 @@ export class UpdateCentreDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(-90, { message: 'La latitude doit être entre -90 et 90.' })
+  @Max(90, { message: 'La latitude doit être entre -90 et 90.' })
   latitude?: number;
 
   @IsOptional()
   @IsNumber()
+  @Min(-180, { message: 'La longitude doit être entre -180 et 180.' })
+  @Max(180, { message: 'La longitude doit être entre -180 et 180.' })
   longitude?: number;
 }

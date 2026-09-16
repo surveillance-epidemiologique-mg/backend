@@ -54,7 +54,7 @@ export class CentresService {
     }
 
     this.listCache.clear();
-    return this.prisma.centreSante.create({
+    const centre = await this.prisma.centreSante.create({
       data: {
         name: dto.name.trim(),
         type: dto.type,
@@ -64,6 +64,17 @@ export class CentresService {
       },
       ...centreWithZoneArgs,
     });
+
+    // Mise à jour de la localisation spatiale si latitude/longitude sont fournies
+    if (dto.latitude !== undefined && dto.longitude !== undefined) {
+      await this.prisma.$executeRaw`
+        UPDATE centres_sante
+        SET localisation = ST_SetSRID(ST_MakePoint(${dto.longitude}, ${dto.latitude}), 4326)
+        WHERE id_centre = ${centre.id}
+      `;
+    }
+
+    return centre;
   }
 
   async update(id: number, dto: UpdateCentreDto) {
@@ -98,10 +109,30 @@ export class CentresService {
       data.longitude = dto.longitude;
     }
     this.listCache.clear();
-    return this.prisma.centreSante.update({
+    const centre = await this.prisma.centreSante.update({
       where: { id },
       data,
       ...centreWithZoneArgs,
     });
+
+    // Recalcule ou efface la géométrie si lat/long ont potentiellement changé
+    const newLat = dto.latitude !== undefined ? dto.latitude : existing.latitude;
+    const newLng = dto.longitude !== undefined ? dto.longitude : existing.longitude;
+
+    if (newLat !== null && newLng !== null) {
+      await this.prisma.$executeRaw`
+        UPDATE centres_sante
+        SET localisation = ST_SetSRID(ST_MakePoint(${newLng}, ${newLat}), 4326)
+        WHERE id_centre = ${centre.id}
+      `;
+    } else {
+      await this.prisma.$executeRaw`
+        UPDATE centres_sante
+        SET localisation = NULL
+        WHERE id_centre = ${centre.id}
+      `;
+    }
+
+    return centre;
   }
 }
