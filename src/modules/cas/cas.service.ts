@@ -29,15 +29,25 @@ const caseInclude = {
   centre: { include: { zone: true } },
   agent: { select: { id: true, name: true } },
   decisionAnalyse: {
-    include: { laboratory: { select: { id: true, name: true } } },
+    include: {
+      laboratory: {
+        select: { id: true, name: true, centre: { select: { name: true } } },
+      },
+    },
   },
   analyses: {
-    include: { laboratory: { select: { id: true, name: true } } },
+    include: {
+      laboratory: {
+        select: { id: true, name: true, centre: { select: { name: true } } },
+      },
+    },
   },
 } as const;
 
 const analyseInclude = {
-  laboratory: { select: { id: true, name: true } },
+  laboratory: {
+    select: { id: true, name: true, centre: { select: { name: true } } },
+  },
 } as const;
 
 @Injectable()

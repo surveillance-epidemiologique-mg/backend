@@ -53,6 +53,20 @@ export class PatientsService {
             maladie: true,
             agent: { select: { id: true, name: true } },
             centre: { select: { id: true, name: true } },
+            decisionAnalyse: {
+              include: {
+                laboratory: {
+                  select: { id: true, name: true, centre: { select: { name: true } } },
+                },
+              },
+            },
+            analyses: {
+              include: {
+                laboratory: {
+                  select: { id: true, name: true, centre: { select: { name: true } } },
+                },
+              },
+            },
           },
           orderBy: { declarationDate: 'desc' },
         },

@@ -1,10 +1,10 @@
 model CasEpidemiologique {
-  id           Int  @id @default(autoincrement()) @map("id_cas")
-  patientId    Int  @map("id_patient")
-  maladieId    Int  @map("id_maladie")
-  centreId     Int  @map("id_centre")
-  agentId      Int  @map("id_agent")
-  laboratoryId Int? @map("id_laboratoire")
+  id                Int  @id @default(autoincrement()) @map("id_cas")
+  patientId         Int  @map("id_patient")
+  maladieId         Int  @map("id_maladie")
+  centreId          Int  @map("id_centre")
+  agentId           Int  @map("id_agent")
+  laboratoryId      Int? @map("id_laboratoire")
   decisionAnalyseId Int? @map("id_analyse_decision")
 
   diagnosticStatus StatutDiag    @default(Suspect) @map("statut_diagnostic")
@@ -21,12 +21,12 @@ model CasEpidemiologique {
   latitude        Float?                                @map("latitude")
   longitude       Float?                                @map("longitude")
 
-  patient    Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  maladie    Maladie      @relation(fields: [maladieId], references: [id], onDelete: Restrict)
-  centre     CentreSante  @relation(fields: [centreId], references: [id], onDelete: Restrict)
-  agent      Utilisateur  @relation("CasAgent", fields: [agentId], references: [id], onDelete: Restrict)
-  laboratory Utilisateur? @relation("CasLaboratoire", fields: [laboratoryId], references: [id], onDelete: SetNull)
-  decisionAnalyse Analyse? @relation("CasDecisionAnalyse", fields: [decisionAnalyseId], references: [id], onDelete: SetNull)
+  patient         Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  maladie         Maladie      @relation(fields: [maladieId], references: [id], onDelete: Restrict)
+  centre          CentreSante  @relation(fields: [centreId], references: [id], onDelete: Restrict)
+  agent           Utilisateur  @relation("CasAgent", fields: [agentId], references: [id], onDelete: Restrict)
+  laboratory      Utilisateur? @relation("CasLaboratoire", fields: [laboratoryId], references: [id], onDelete: SetNull)
+  decisionAnalyse Analyse?     @relation("CasDecisionAnalyse", fields: [decisionAnalyseId], references: [id], onDelete: SetNull)
 
   analyses      Analyse[]
   notifications Notification[]

@@ -53,9 +53,9 @@ enum StatutAlerte {
 }
 
 enum TypeResultatAttendu {
-  Numerique @map("Numerique")
+  Numerique           @map("Numerique")
   ChoixPositifNegatif @map("Choix_Positif_Negatif")
-  TexteLibre @map("Texte_libre")
+  TexteLibre          @map("Texte_libre")
 
   @@map("type_resultat_attendu_enum")
 }

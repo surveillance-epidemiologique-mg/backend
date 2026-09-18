@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { StatutAlerte, StatutDiag } from '../../../generated/prisma/client';
+import { StatutAlerte, StatutDiag, TypeZone } from '../../../generated/prisma/client';
 import { TtlCache } from '../../common/cache/ttl-cache';
 import { ROLES } from '../../common/constants/roles';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
@@ -351,6 +351,62 @@ export class CarteService {
     const result = this.collection(features);
     this.clustersCache.set('all', result);
     return result;
+  }
+
+  /**
+   * Alertes par région (ADM1) pour la carte des régions à risque.
+   * Retourne `[{ region_name, risk_level }]` — risk_level ∈
+   * "High" | "Moderate" | "Low" | "Very low" (max gravité par région).
+   */
+  async alertesRegions(): Promise<{ region_name: string; risk_level: string }[]> {
+    const zones = await this.prisma.zoneAdministrative.findMany({
+      select: { id: true, name: true, type: true, parentId: true },
+    });
+    const byId = new Map(zones.map((z) => [z.id, z]));
+
+    const regionOf = (zoneId: number): string | null => {
+      let z = byId.get(zoneId);
+      let guard = 0;
+      while (z && z.type !== TypeZone.Region && z.parentId != null && guard++ < 20) {
+        z = byId.get(z.parentId);
+      }
+      return z && z.type === TypeZone.Region ? z.name : null;
+    };
+
+    const alertes = await this.prisma.alerte.findMany({
+      where: { statutAlerte: StatutAlerte.Active },
+      select: { zoneId: true, niveauGravite: true },
+    });
+
+    const GRAVITE_RANK: Record<string, number> = {
+      Faible: 1,
+      Modere: 2,
+      Eleve: 3,
+      Critique: 4,
+    };
+    const RISK_LEVEL: Record<string, string> = {
+      Faible: 'Very low',
+      Modere: 'Low',
+      Eleve: 'Moderate',
+      Critique: 'High',
+    };
+
+    const regionRank = new Map<string, number>();
+    const regionGravite = new Map<string, string>();
+    for (const a of alertes) {
+      const region = regionOf(a.zoneId);
+      if (!region) continue;
+      const rank = GRAVITE_RANK[a.niveauGravite] ?? 0;
+      if ((regionRank.get(region) ?? 0) < rank) {
+        regionRank.set(region, rank);
+        regionGravite.set(region, a.niveauGravite);
+      }
+    }
+
+    return Array.from(regionGravite.entries()).map(([region_name, gravite]) => ({
+      region_name,
+      risk_level: RISK_LEVEL[gravite] ?? 'Low',
+    }));
   }
 
   /**

@@ -9,6 +9,7 @@ import { seedUtilisateurs } from "./seeders/utilisateur.seeder";
 import { seedPatients } from "./seeders/patient.seeder";
 import { seedCasEpidemiologiques } from "./seeders/cas-epidemiologique.seeder";
 import { seedAlertes } from "./seeders/alerte.seeder";
+import { seedAlertesCarteRegions } from "./seeders/alerte-carte-regions.seeder";
 
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -29,6 +30,7 @@ async function main() {
       await seedPatients(tx);
       await seedCasEpidemiologiques(tx);
       await seedAlertes(tx);
+      await seedAlertesCarteRegions(tx);
     });
 
     console.log("Seeding terminé avec succès.");

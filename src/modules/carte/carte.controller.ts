@@ -58,6 +58,16 @@ export class CarteController {
   }
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Get('alertes-regions')
+  @Header('Cache-Control', 'public, max-age=30')
+  @ApiOperation({
+    summary: 'Alertes par région (ADM1) : [{ region_name, risk_level }]',
+  })
+  alertesRegions() {
+    return this.carteService.alertesRegions();
+  }
+
+  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('zone/:id')
   @ApiOperation({
     summary: 'Résumé contextuel d’une zone (centres, alertes, comptage des cas)',
