@@ -32,7 +32,7 @@
     "prisma:generate": "npx prisma generate",
     "prisma:format": "npx prisma format --config ./prisma.config.ts",
     "prisma:sync": "npm run prisma:format && npm run prisma:generate && npm run prisma:push && npm run prisma:seed && exit",
-    "prisma:prod": "npm run prisma:generate && npm run prisma:push && node scripts/import-region-geom.js && dotenv -e .env -- psql \"process.env.DATABASE_URL\" -f prisma/ensure-indexes.sql"
+    "prisma:prod": "npm run prisma:generate && npm run prisma:push"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
