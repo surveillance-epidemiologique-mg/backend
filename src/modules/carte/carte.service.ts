@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { StatutAlerte, StatutDiag, TypeZone } from '../../../generated/prisma/client';
+import {
+  Prisma,
+  StatutAlerte,
+  StatutDiag,
+  TypeZone,
+} from '../../../generated/prisma/client';
 import { TtlCache } from '../../common/cache/ttl-cache';
 import { ROLES } from '../../common/constants/roles';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
@@ -23,9 +28,17 @@ const GRAVITE_RANK: Record<string, number> = {
   Critique: 4,
 };
 
+const RISK_LEVEL: Record<string, string> = {
+  Faible: 'Very low',
+  Modere: 'Low',
+  Eleve: 'Moderate',
+  Critique: 'High',
+};
+
 @Injectable()
 export class CarteService {
   private readonly zonesCache = new TtlCache<GeoJsonCollection>(30_000);
+  private readonly regionsCache = new TtlCache<GeoJsonCollection>(30_000);
   private readonly centresCache = new TtlCache<GeoJsonCollection>(300_000);
   private readonly alertesCache = new TtlCache<GeoJsonCollection>(30_000);
   private readonly clustersCache = new TtlCache<GeoJsonCollection>(60_000);
@@ -42,6 +55,49 @@ export class CarteService {
     } catch {
       return null;
     }
+  }
+
+  private async regionAlertSummary(maladieId?: number): Promise<
+    Map<
+      string,
+      {
+        gravite: string;
+        riskLevel: string;
+      }
+    >
+  > {
+    const zones = await this.prisma.zoneAdministrative.findMany({
+      select: { id: true, name: true, type: true, parentId: true },
+    });
+    const byId = new Map(zones.map((z) => [z.id, z]));
+
+    const alertes = await this.prisma.alerte.findMany({
+      where: {
+        statutAlerte: StatutAlerte.Active,
+        centreId: null,
+        ...(maladieId !== undefined ? { maladieId } : {}),
+      },
+      select: { zoneId: true, niveauGravite: true },
+    });
+
+    const regionRank = new Map<string, number>();
+    const summary = new Map<string, { gravite: string; riskLevel: string }>();
+
+    for (const alerte of alertes) {
+      const zone = byId.get(alerte.zoneId);
+      if (zone?.type !== TypeZone.Region) continue;
+      const region = zone.name;
+      const rank = GRAVITE_RANK[alerte.niveauGravite] ?? 0;
+      if ((regionRank.get(region) ?? 0) < rank) {
+        regionRank.set(region, rank);
+        summary.set(region, {
+          gravite: alerte.niveauGravite,
+          riskLevel: RISK_LEVEL[alerte.niveauGravite] ?? 'Low',
+        });
+      }
+    }
+
+    return summary;
   }
 
   private async centreIdFor(
@@ -62,13 +118,18 @@ export class CarteService {
    * Chaque zone reçoit la gravité maximale de ses alertes actives
    * (coloration) ainsi que les détails de l'alerte la plus grave.
    */
-  async zonesGeoJson(): Promise<GeoJsonCollection> {
-    const cached = this.zonesCache.get('all');
+  async zonesGeoJson(maladieId?: number): Promise<GeoJsonCollection> {
+    const cached = this.zonesCache.get(String(maladieId ?? 'all'));
     if (cached) {
       return cached;
     }
     const rows = await this.prisma.$queryRaw<
-      { id_zone: number; nom_zone: string; type_zone: string; geojson: string | null }[]
+      {
+        id_zone: number;
+        nom_zone: string;
+        type_zone: string;
+        geojson: string | null;
+      }[]
     >`
       SELECT
         z.id_zone,
@@ -82,11 +143,16 @@ export class CarteService {
         ) AS geojson
       FROM zones_administratives z
       LEFT JOIN centres_sante ct ON ct.id_zone = z.id_zone
-      WHERE z.geometrie IS NOT NULL OR ct.localisation IS NOT NULL
+      WHERE z.type_zone <> 'Region'
+        AND (z.geometrie IS NOT NULL OR ct.localisation IS NOT NULL)
       GROUP BY z.id_zone, z.nom_zone, z.type_zone, z.geometrie`;
 
     const alertes = await this.prisma.alerte.findMany({
-      where: { statutAlerte: StatutAlerte.Active },
+      where: {
+        statutAlerte: StatutAlerte.Active,
+        centreId: null,
+        ...(maladieId !== undefined ? { maladieId } : {}),
+      },
       select: {
         zoneId: true,
         niveauGravite: true,
@@ -140,7 +206,53 @@ export class CarteService {
       });
     }
     const result = this.collection(features);
-    this.zonesCache.set('all', result);
+    this.zonesCache.set(String(maladieId ?? 'all'), result);
+    return result;
+  }
+
+  /**
+   * Couche « Régions » (ADM1) : polygones depuis la base + niveau de risque agrégé.
+   */
+  async regionsGeoJson(maladieId?: number): Promise<GeoJsonCollection> {
+    const cached = this.regionsCache.get(String(maladieId ?? 'all'));
+    if (cached) {
+      return cached;
+    }
+
+    const rows = await this.prisma.$queryRaw<
+      { id_zone: number; nom_zone: string; geojson: string | null }[]
+    >`
+      SELECT
+        z.id_zone,
+        z.nom_zone,
+        ST_AsGeoJSON(z.geometrie) AS geojson
+      FROM zones_administratives z
+      WHERE z.type_zone = 'Region' AND z.geometrie IS NOT NULL`;
+
+    const alertesByRegion = await this.regionAlertSummary(maladieId);
+    const features: GeoJsonFeature[] = [];
+
+    for (const row of rows) {
+      if (!row.geojson) continue;
+      const geom = this.parseGeom(row.geojson);
+      if (!geom) continue;
+
+      const alerte = alertesByRegion.get(row.nom_zone);
+      features.push({
+        type: 'Feature',
+        geometry: geom,
+        properties: {
+          id: row.id_zone,
+          nom: row.nom_zone,
+          type: TypeZone.Region,
+          risk_level: alerte?.riskLevel ?? null,
+          gravite: alerte?.gravite ?? null,
+        },
+      });
+    }
+
+    const result = this.collection(features);
+    this.regionsCache.set(String(maladieId ?? 'all'), result);
     return result;
   }
 
@@ -199,6 +311,8 @@ export class CarteService {
     const rows = await this.prisma.$queryRaw<
       {
         id_alerte: number;
+        id_centre: number | null;
+        nom_centre: string | null;
         nom_maladie: string;
         nom_zone: string;
         niveau_gravite: string;
@@ -209,6 +323,8 @@ export class CarteService {
     >`
       SELECT
         a.id_alerte,
+        a.id_centre,
+        ct.nom_centre,
         m.nom_maladie,
         z.nom_zone,
         a.niveau_gravite,
@@ -216,6 +332,7 @@ export class CarteService {
         a.date_detection,
         ST_AsGeoJSON(a.emprise_spatiale) AS geojson
       FROM alertes a
+      LEFT JOIN centres_sante ct ON ct.id_centre = a.id_centre
       JOIN maladies m ON m.id_maladie = a.id_maladie
       JOIN zones_administratives z ON z.id_zone = a.id_zone
       WHERE a.statut_alerte = 'Active' AND a.emprise_spatiale IS NOT NULL`;
@@ -230,6 +347,9 @@ export class CarteService {
         geometry: geom,
         properties: {
           id: r.id_alerte,
+          centreId: r.id_centre,
+          centre: r.nom_centre,
+          scope: r.id_centre == null ? 'Zone' : 'Centre',
           maladie: r.nom_maladie,
           zone: r.nom_zone,
           gravite: r.niveau_gravite,
@@ -253,6 +373,7 @@ export class CarteService {
     statut?: StatutDiag,
     maladieId?: number,
   ): Promise<GeoJsonCollection> {
+    if (maladieId === undefined) return this.collection([]);
     const centreId = await this.centreIdFor(user);
 
     const centres = await this.prisma.$queryRaw<
@@ -260,14 +381,12 @@ export class CarteService {
     >`
       SELECT id_centre, ST_AsGeoJSON(localisation) AS geojson
       FROM centres_sante WHERE localisation IS NOT NULL`;
-    const pointByCentre = new Map(
-      centres.map((c) => [c.id_centre, c.geojson]),
-    );
+    const pointByCentre = new Map(centres.map((c) => [c.id_centre, c.geojson]));
 
     const cas = await this.prisma.casEpidemiologique.findMany({
       where: {
         ...(statut ? { diagnosticStatus: statut } : {}),
-        ...(maladieId ? { maladieId } : {}),
+        maladieId,
         ...(centreId !== undefined ? { centreId } : {}),
       },
       select: {
@@ -297,8 +416,10 @@ export class CarteService {
         properties: {
           id: c.id,
           code: c.patient.anonymousCode,
+          maladieId,
           maladie: c.maladie.name,
           centre: c.centre.name,
+          centreId: c.centre.id,
           zone: c.centre.zone?.name ?? null,
           statut: c.diagnosticStatus,
         },
@@ -311,8 +432,14 @@ export class CarteService {
    * Heatmap / clustering (MAP-03) : ST_ClusterDBSCAN + ST_Centroid.
    * La localisation des cas est approchée par celle de leur centre de santé.
    */
-  async clustersGeoJson(): Promise<GeoJsonCollection> {
-    const cached = this.clustersCache.get('all');
+  async clustersGeoJson(
+    user: AuthenticatedUser,
+    maladieId?: number,
+  ): Promise<GeoJsonCollection> {
+    if (maladieId === undefined) return this.collection([]);
+    const centreId = await this.centreIdFor(user);
+    const cacheKey = `${maladieId}:${centreId ?? 'all'}`;
+    const cached = this.clustersCache.get(cacheKey);
     if (cached) {
       return cached;
     }
@@ -325,9 +452,11 @@ export class CarteService {
         FROM cas_epidemiologiques c
         JOIN centres_sante ct ON ct.id_centre = c.id_centre
         WHERE c.statut_diagnostic = 'Confirme' AND ct.localisation IS NOT NULL
+          AND c.id_maladie = ${maladieId}
+          ${centreId !== undefined ? Prisma.sql`AND c.id_centre = ${centreId}` : Prisma.empty}
       ),
       clustered AS (
-        SELECT ST_ClusterDBSCAN(geom, eps := ${eps}, minpoints := 1) OVER () AS cluster_id, geom
+        SELECT ST_ClusterDBSCAN(geom, eps := ${eps}, minpoints := 1) OVER (ORDER BY geom) AS cluster_id, geom
         FROM pts
       )
       SELECT
@@ -345,11 +474,11 @@ export class CarteService {
       features.push({
         type: 'Feature',
         geometry: geom,
-        properties: { cluster: r.cluster_id, nb: r.nb },
+        properties: { cluster: r.cluster_id, nb: r.nb, maladieId },
       });
     }
     const result = this.collection(features);
-    this.clustersCache.set('all', result);
+    this.clustersCache.set(cacheKey, result);
     return result;
   }
 
@@ -358,54 +487,13 @@ export class CarteService {
    * Retourne `[{ region_name, risk_level }]` — risk_level ∈
    * "High" | "Moderate" | "Low" | "Very low" (max gravité par région).
    */
-  async alertesRegions(): Promise<{ region_name: string; risk_level: string }[]> {
-    const zones = await this.prisma.zoneAdministrative.findMany({
-      select: { id: true, name: true, type: true, parentId: true },
-    });
-    const byId = new Map(zones.map((z) => [z.id, z]));
-
-    const regionOf = (zoneId: number): string | null => {
-      let z = byId.get(zoneId);
-      let guard = 0;
-      while (z && z.type !== TypeZone.Region && z.parentId != null && guard++ < 20) {
-        z = byId.get(z.parentId);
-      }
-      return z && z.type === TypeZone.Region ? z.name : null;
-    };
-
-    const alertes = await this.prisma.alerte.findMany({
-      where: { statutAlerte: StatutAlerte.Active },
-      select: { zoneId: true, niveauGravite: true },
-    });
-
-    const GRAVITE_RANK: Record<string, number> = {
-      Faible: 1,
-      Modere: 2,
-      Eleve: 3,
-      Critique: 4,
-    };
-    const RISK_LEVEL: Record<string, string> = {
-      Faible: 'Very low',
-      Modere: 'Low',
-      Eleve: 'Moderate',
-      Critique: 'High',
-    };
-
-    const regionRank = new Map<string, number>();
-    const regionGravite = new Map<string, string>();
-    for (const a of alertes) {
-      const region = regionOf(a.zoneId);
-      if (!region) continue;
-      const rank = GRAVITE_RANK[a.niveauGravite] ?? 0;
-      if ((regionRank.get(region) ?? 0) < rank) {
-        regionRank.set(region, rank);
-        regionGravite.set(region, a.niveauGravite);
-      }
-    }
-
-    return Array.from(regionGravite.entries()).map(([region_name, gravite]) => ({
+  async alertesRegions(
+    maladieId?: number,
+  ): Promise<{ region_name: string; risk_level: string }[]> {
+    const summary = await this.regionAlertSummary(maladieId);
+    return Array.from(summary.entries()).map(([region_name, alerte]) => ({
       region_name,
-      risk_level: RISK_LEVEL[gravite] ?? 'Low',
+      risk_level: alerte.riskLevel,
     }));
   }
 
@@ -413,7 +501,11 @@ export class CarteService {
    * Résumé contextuel d'une zone administrative (panneau d'information de la carte) :
    * centres de santé, alertes actives et comptage des cas.
    */
-  async zoneSummary(zoneId: number) {
+  async zoneSummary(
+    zoneId: number,
+    user: AuthenticatedUser,
+    maladieId?: number,
+  ) {
     const zone = await this.prisma.zoneAdministrative.findUnique({
       where: { id: zoneId },
       select: { id: true, name: true, type: true },
@@ -422,14 +514,28 @@ export class CarteService {
       throw new NotFoundException('Zone introuvable.');
     }
 
+    const centreId = await this.centreIdFor(user);
+    const descendants = await this.prisma.$queryRaw<{ id_zone: number }[]>`
+      WITH RECURSIVE zones AS (
+        SELECT id_zone FROM zones_administratives WHERE id_zone = ${zoneId}
+        UNION
+        SELECT z.id_zone FROM zones_administratives z JOIN zones p ON z.id_zone_parent = p.id_zone
+      ) SELECT id_zone FROM zones`;
+    const zoneIds = descendants.map((z) => z.id_zone);
     const centres = await this.prisma.centreSante.findMany({
-      where: { zoneId },
+      where: {
+        zoneId: { in: zoneIds },
+        ...(centreId !== undefined ? { id: centreId } : {}),
+      },
       select: { id: true, name: true, type: true },
       orderBy: { name: 'asc' },
     });
 
     const cas = await this.prisma.casEpidemiologique.findMany({
-      where: { centre: { zoneId } },
+      where: {
+        centreId: { in: centres.map((c) => c.id) },
+        ...(maladieId !== undefined ? { maladieId } : {}),
+      },
       select: { diagnosticStatus: true },
     });
     const casTotal = cas.length;
@@ -438,7 +544,12 @@ export class CarteService {
     ).length;
 
     const alertes = await this.prisma.alerte.findMany({
-      where: { zoneId, statutAlerte: StatutAlerte.Active },
+      where: {
+        zoneId,
+        statutAlerte: StatutAlerte.Active,
+        centreId: null,
+        ...(maladieId !== undefined ? { maladieId } : {}),
+      },
       select: {
         niveauGravite: true,
         detectedCaseCount: true,
@@ -446,19 +557,17 @@ export class CarteService {
       },
     });
 
-    const GRAVITE_RANK: Record<string, number> = {
-      Faible: 1,
-      Modere: 2,
-      Eleve: 3,
-      Critique: 4,
-    };
     let alerte: {
       gravite: string;
       maladie: string;
       cas: number;
     } | null = null;
     for (const a of alertes) {
-      if (!alerte || (GRAVITE_RANK[a.niveauGravite] ?? 0) > (GRAVITE_RANK[alerte.gravite] ?? 0)) {
+      if (
+        !alerte ||
+        (GRAVITE_RANK[a.niveauGravite] ?? 0) >
+          (GRAVITE_RANK[alerte.gravite] ?? 0)
+      ) {
         alerte = {
           gravite: a.niveauGravite,
           maladie: a.maladie.name,

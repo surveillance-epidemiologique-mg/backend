@@ -1,8 +1,10 @@
 import {
   IsInt,
+  ValidateIf,
   IsOptional,
   IsString,
   MaxLength,
+  Max,
   Min,
   MinLength,
 } from 'class-validator';
@@ -18,10 +20,17 @@ export class UpdateMaladieDto {
   @MaxLength(20)
   icd10Code?: string;
 
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsInt({ message: 'Le seuil d’alerte doit être un entier.' })
   @Min(1)
-  alertThreshold?: number;
+  @Max(2147483647)
+  alertThresholdCentre?: number;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsInt({ message: 'Le seuil de zone doit être un entier.' })
+  @Min(1)
+  @Max(2147483647)
+  alertThresholdRegion?: number;
 
   @IsOptional()
   @IsString()

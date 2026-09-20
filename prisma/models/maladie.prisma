@@ -1,9 +1,12 @@
 model Maladie {
-  id             Int     @id @default(autoincrement()) @map("id_maladie")
-  name           String  @map("nom_maladie") @db.VarChar(100)
-  icd10Code      String? @unique @map("code_icd10") @db.VarChar(20)
-  alertThreshold Int     @default(1) @map("seuil_alerte")
-  description    String? @map("description")
+  id                   Int     @id @default(autoincrement()) @map("id_maladie")
+  name                 String  @map("nom_maladie") @db.VarChar(100)
+  icd10Code            String? @unique @map("code_icd10") @db.VarChar(20)
+  alertThreshold       Int     @default(1) @map("seuil_alerte")
+  // Deprecated alertThreshold is kept in sync with the regional threshold.
+  alertThresholdCentre Int     @default(1) @map("seuil_alerte_centre")
+  alertThresholdRegion Int     @default(1) @map("seuil_alerte_region")
+  description          String? @map("description")
 
   cas     CasEpidemiologique[]
   alertes Alerte[]

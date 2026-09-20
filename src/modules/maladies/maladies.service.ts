@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '../../../generated/prisma/client';
+import { Prisma, type Maladie } from '../../../generated/prisma/client';
 import { TtlCache } from '../../common/cache/ttl-cache';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CreateMaladieDto } from './dto/create-maladie.dto';
@@ -7,9 +7,7 @@ import { UpdateMaladieDto } from './dto/update-maladie.dto';
 
 @Injectable()
 export class MaladiesService {
-  private readonly listCache = new TtlCache<ReturnType<typeof this.list>>(
-    60_000,
-  );
+  private readonly listCache = new TtlCache<Promise<Maladie[]>>(60_000);
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -31,7 +29,9 @@ export class MaladiesService {
       data: {
         name: dto.name.trim(),
         icd10Code: dto.icd10Code?.trim().toUpperCase() || null,
-        alertThreshold: dto.alertThreshold,
+        alertThreshold: dto.alertThresholdRegion,
+        alertThresholdCentre: dto.alertThresholdCentre,
+        alertThresholdRegion: dto.alertThresholdRegion,
         description: dto.description,
       },
     });
@@ -51,8 +51,12 @@ export class MaladiesService {
     if (dto.icd10Code !== undefined) {
       data.icd10Code = dto.icd10Code?.trim().toUpperCase() || null;
     }
-    if (dto.alertThreshold !== undefined) {
-      data.alertThreshold = dto.alertThreshold;
+    if (dto.alertThresholdCentre !== undefined) {
+      data.alertThresholdCentre = dto.alertThresholdCentre;
+    }
+    if (dto.alertThresholdRegion !== undefined) {
+      data.alertThresholdRegion = dto.alertThresholdRegion;
+      data.alertThreshold = dto.alertThresholdRegion;
     }
     if (dto.description !== undefined) {
       data.description = dto.description;

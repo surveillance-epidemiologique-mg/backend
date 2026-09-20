@@ -13,6 +13,9 @@ enum TypeCentre {
   CHRD
   CHRR
   CHU
+  CentreSante
+  PosteSante
+  Hopital
 
   @@map("type_centre_enum")
 }

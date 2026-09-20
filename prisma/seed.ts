@@ -1,15 +1,16 @@
-import "dotenv/config";
-import { PrismaClient } from "../generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { seedRoles } from "./seeders/role.seeder";
-import { seedMaladies } from "./seeders/maladie.seeder";
-import { seedZonesAdministratives } from "./seeders/zone-administrative.seeder";
-import { seedCentresSante } from "./seeders/centre-sante.seeder";
-import { seedUtilisateurs } from "./seeders/utilisateur.seeder";
-import { seedPatients } from "./seeders/patient.seeder";
-import { seedCasEpidemiologiques } from "./seeders/cas-epidemiologique.seeder";
-import { seedAlertes } from "./seeders/alerte.seeder";
-import { seedAlertesCarteRegions } from "./seeders/alerte-carte-regions.seeder";
+import 'dotenv/config';
+import { PrismaClient } from '../generated/prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { seedRoles } from './seeders/role.seeder';
+import { seedMaladies } from './seeders/maladie.seeder';
+import { seedZonesAdministratives } from './seeders/zone-administrative.seeder';
+import { seedCentresSante } from './seeders/centre-sante.seeder';
+import { seedNationalCentres } from './seeders/national-centres.seeder';
+import { seedUtilisateurs } from './seeders/utilisateur.seeder';
+import { seedPatients } from './seeders/patient.seeder';
+import { seedCasEpidemiologiques } from './seeders/cas-epidemiologique.seeder';
+import { seedAlertes } from './seeders/alerte.seeder';
+import { seedZonesGeometrie } from './seeders/zone-geometrie.seeder';
 
 async function main() {
   const databaseUrl = process.env.DATABASE_URL;
@@ -22,20 +23,25 @@ async function main() {
   const prisma = new PrismaClient({ adapter });
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await Promise.all([seedRoles(tx), seedMaladies(tx)]);
-      await seedZonesAdministratives(tx);
-      await seedCentresSante(tx);
-      await seedUtilisateurs(tx);
-      await seedPatients(tx);
-      await seedCasEpidemiologiques(tx);
-      await seedAlertes(tx);
-      await seedAlertesCarteRegions(tx);
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(20260920, 1)`;
+        await Promise.all([seedRoles(tx), seedMaladies(tx)]);
+        await seedZonesAdministratives(tx);
+        await seedZonesGeometrie(tx);
+        await seedCentresSante(tx);
+        await seedNationalCentres(tx);
+        await seedUtilisateurs(tx);
+        await seedPatients(tx);
+        await seedCasEpidemiologiques(tx);
+        await seedAlertes(tx);
+      },
+      { maxWait: 10000, timeout: 180000 },
+    );
 
-    console.log("Seeding terminé avec succès.");
+    console.log('Seeding terminé avec succès.');
   } catch (error) {
-    console.error("Échec du seeding:", error);
+    console.error('Échec du seeding:', error);
     throw error;
   } finally {
     await prisma.$disconnect();

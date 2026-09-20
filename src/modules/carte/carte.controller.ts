@@ -1,6 +1,13 @@
-import { Controller, Get, Header, Param, ParseIntPipe, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  ParseIntPipe,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { StatutDiag } from '../../../generated/prisma/client';
+import { CarteQueryDto } from './dto/carte-query.dto';
 import { CarteService } from './carte.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ROLES } from '../../common/constants/roles';
@@ -19,8 +26,18 @@ export class CarteController {
   @Get('zones')
   @Header('Cache-Control', 'public, max-age=30')
   @ApiOperation({ summary: 'Limites administratives (GeoJSON)' })
-  zones() {
-    return this.carteService.zonesGeoJson();
+  zones(@Query() query: CarteQueryDto) {
+    return this.carteService.zonesGeoJson(query.id_maladie ?? query.maladieId);
+  }
+
+  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Get('regions')
+  @Header('Cache-Control', 'public, max-age=30')
+  @ApiOperation({ summary: 'Régions ADM1 (GeoJSON + niveau de risque)' })
+  regions(@Query() query: CarteQueryDto) {
+    return this.carteService.regionsGeoJson(
+      query.id_maladie ?? query.maladieId,
+    );
   }
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
@@ -41,46 +58,60 @@ export class CarteController {
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('cas')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({
     summary:
       'Cas (GeoJSON points colorés par statut), filtres statut + maladie, Médecin limité à son centre',
   })
-  cas(
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('statut') statut?: StatutDiag,
-    @Query('maladieId') maladieId?: string,
-  ) {
+  cas(@CurrentUser() user: AuthenticatedUser, @Query() query: CarteQueryDto) {
     return this.carteService.casGeoJson(
       user,
-      statut,
-      maladieId ? Number(maladieId) : undefined,
+      query.statut,
+      query.id_maladie ?? query.maladieId,
     );
   }
-
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('alertes-regions')
   @Header('Cache-Control', 'public, max-age=30')
   @ApiOperation({
     summary: 'Alertes par région (ADM1) : [{ region_name, risk_level }]',
   })
-  alertesRegions() {
-    return this.carteService.alertesRegions();
+  alertesRegions(@Query() query: CarteQueryDto) {
+    return this.carteService.alertesRegions(
+      query.id_maladie ?? query.maladieId,
+    );
   }
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('zone/:id')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({
-    summary: 'Résumé contextuel d’une zone (centres, alertes, comptage des cas)',
+    summary:
+      'Résumé contextuel d’une zone (centres, alertes, comptage des cas)',
   })
-  zoneSummary(@Param('id', ParseIntPipe) id: number) {
-    return this.carteService.zoneSummary(id);
+  zoneSummary(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: CarteQueryDto,
+  ) {
+    return this.carteService.zoneSummary(
+      id,
+      user,
+      query.id_maladie ?? query.maladieId,
+    );
   }
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('clusters')
-  @Header('Cache-Control', 'public, max-age=60')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({ summary: 'Clusters de cas (GeoJSON points)' })
-  clusters() {
-    return this.carteService.clustersGeoJson();
+  clusters(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: CarteQueryDto,
+  ) {
+    return this.carteService.clustersGeoJson(
+      user,
+      query.id_maladie ?? query.maladieId,
+    );
   }
 }
