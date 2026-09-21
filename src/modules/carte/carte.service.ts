@@ -118,8 +118,13 @@ export class CarteService {
    * Chaque zone reçoit la gravité maximale de ses alertes actives
    * (coloration) ainsi que les détails de l'alerte la plus grave.
    */
-  async zonesGeoJson(maladieId?: number): Promise<GeoJsonCollection> {
-    const cached = this.zonesCache.get(String(maladieId ?? 'all'));
+  async zonesGeoJson(
+    maladieId?: number,
+    forceRefresh = false,
+  ): Promise<GeoJsonCollection> {
+    const cached = forceRefresh
+      ? undefined
+      : this.zonesCache.get(String(maladieId ?? 'all'));
     if (cached) {
       return cached;
     }
@@ -213,8 +218,13 @@ export class CarteService {
   /**
    * Couche « Régions » (ADM1) : polygones depuis la base + niveau de risque agrégé.
    */
-  async regionsGeoJson(maladieId?: number): Promise<GeoJsonCollection> {
-    const cached = this.regionsCache.get(String(maladieId ?? 'all'));
+  async regionsGeoJson(
+    maladieId?: number,
+    forceRefresh = false,
+  ): Promise<GeoJsonCollection> {
+    const cached = forceRefresh
+      ? undefined
+      : this.regionsCache.get(String(maladieId ?? 'all'));
     if (cached) {
       return cached;
     }
@@ -303,8 +313,8 @@ export class CarteService {
   }
 
   /** Couche "Alertes" actives (polygones colorés selon niveau de gravité). */
-  async alertesGeoJson(): Promise<GeoJsonCollection> {
-    const cached = this.alertesCache.get('all');
+  async alertesGeoJson(forceRefresh = false): Promise<GeoJsonCollection> {
+    const cached = forceRefresh ? undefined : this.alertesCache.get('all');
     if (cached) {
       return cached;
     }
@@ -435,11 +445,12 @@ export class CarteService {
   async clustersGeoJson(
     user: AuthenticatedUser,
     maladieId?: number,
+    forceRefresh = false,
   ): Promise<GeoJsonCollection> {
     if (maladieId === undefined) return this.collection([]);
     const centreId = await this.centreIdFor(user);
     const cacheKey = `${maladieId}:${centreId ?? 'all'}`;
-    const cached = this.clustersCache.get(cacheKey);
+    const cached = forceRefresh ? undefined : this.clustersCache.get(cacheKey);
     if (cached) {
       return cached;
     }

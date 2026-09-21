@@ -24,19 +24,23 @@ export class CarteController {
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('zones')
-  @Header('Cache-Control', 'public, max-age=30')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({ summary: 'Limites administratives (GeoJSON)' })
   zones(@Query() query: CarteQueryDto) {
-    return this.carteService.zonesGeoJson(query.id_maladie ?? query.maladieId);
+    return this.carteService.zonesGeoJson(
+      query.id_maladie ?? query.maladieId,
+      query.refresh,
+    );
   }
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('regions')
-  @Header('Cache-Control', 'public, max-age=30')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({ summary: 'Régions ADM1 (GeoJSON + niveau de risque)' })
   regions(@Query() query: CarteQueryDto) {
     return this.carteService.regionsGeoJson(
       query.id_maladie ?? query.maladieId,
+      query.refresh,
     );
   }
 
@@ -50,10 +54,10 @@ export class CarteController {
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('alertes')
-  @Header('Cache-Control', 'public, max-age=30')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({ summary: 'Alertes actives (GeoJSON polygones)' })
-  alertes() {
-    return this.carteService.alertesGeoJson();
+  alertes(@Query() query: CarteQueryDto) {
+    return this.carteService.alertesGeoJson(query.refresh);
   }
 
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
@@ -72,7 +76,7 @@ export class CarteController {
   }
   @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('alertes-regions')
-  @Header('Cache-Control', 'public, max-age=30')
+  @Header('Cache-Control', 'private, no-store')
   @ApiOperation({
     summary: 'Alertes par région (ADM1) : [{ region_name, risk_level }]',
   })
@@ -112,6 +116,7 @@ export class CarteController {
     return this.carteService.clustersGeoJson(
       user,
       query.id_maladie ?? query.maladieId,
+      query.refresh,
     );
   }
 }
