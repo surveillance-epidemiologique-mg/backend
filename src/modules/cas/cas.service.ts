@@ -287,13 +287,16 @@ export class CasService {
     delete where.diagnosticStatus;
 
     if (user.role !== ROLES.ADMINISTRATEUR) {
-      // Agent Laboratoire : cas en attente (Suspect) + cas déjà traités qu'il a
-      // lui-même confirmés/invalidés (décision portée par une de ses analyses).
+      // Agent Laboratoire : conserver les cas qui ont encore une analyse
+      // demandée ou au moins une analyse réalisée par cet agent. Le statut
+      // global du cas peut déjà être confirmé alors qu'une analyse
+      // complémentaire reste en attente.
       where.OR = [
-        { diagnosticStatus: StatutDiag.Suspect },
+        { analyses: { some: { statut: StatutAnalyse.Demandee } } },
         {
-          diagnosticStatus: { in: [StatutDiag.Confirme, StatutDiag.Invalide] },
-          decisionAnalyse: { laboratoryId: user.id },
+          analyses: {
+            some: { statut: StatutAnalyse.Realisee, laboratoryId: user.id },
+          },
         },
       ];
     }

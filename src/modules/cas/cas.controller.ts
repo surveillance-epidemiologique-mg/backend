@@ -76,7 +76,7 @@ export class CasController {
   @Roles(ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('laboratoire')
   @ApiOperation({
-    summary: 'Cas en attente (Suspect) pour le laboratoire',
+    summary: 'Cas avec analyses en attente ou traitées par le laboratoire',
   })
   laboratoire(
     @CurrentUser() user: AuthenticatedUser,
