@@ -15,7 +15,7 @@ export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
   private async centreIdFor(user: AuthenticatedUser): Promise<number | undefined> {
-    if (user.role !== ROLES.MEDECIN) {
+    if (user.role !== ROLES.MEDECIN && user.role !== ROLES.LABORATOIRE) {
       return undefined;
     }
     const utilisateur = await this.prisma.utilisateur.findUnique({
@@ -29,7 +29,12 @@ export class DashboardService {
     user: AuthenticatedUser,
     query: DashboardQueryDto,
   ): Promise<Prisma.CasEpidemiologiqueWhereInput> {
-    const centreId = await this.centreIdFor(user);
+    const defaultCentreId = await this.centreIdFor(user);
+    // 0 est la valeur explicite « Tous les centres ». Sans valeur fournie,
+    // les médecins et laboratoires restent positionnés sur leur centre.
+    const centreId = query.centreId === 0
+      ? undefined
+      : query.centreId ?? defaultCentreId;
     const where: Prisma.CasEpidemiologiqueWhereInput = {};
 
     if (centreId !== undefined) {
@@ -50,8 +55,40 @@ export class DashboardService {
     return where;
   }
 
+  private async buildAlertWhere(
+    user: AuthenticatedUser,
+    query: DashboardQueryDto,
+  ): Promise<Prisma.AlerteWhereInput> {
+    const defaultCentreId = await this.centreIdFor(user);
+    const centreId = query.centreId === 0
+      ? undefined
+      : query.centreId ?? defaultCentreId;
+    const where: Prisma.AlerteWhereInput = {
+      statutAlerte: StatutAlerte.Active,
+      ...(query.maladieId ? { maladieId: query.maladieId } : {}),
+    };
+
+    if (centreId !== undefined) {
+      const centre = await this.prisma.centreSante.findUnique({
+        where: { id: centreId },
+        select: { zoneId: true },
+      });
+      where.OR = centre?.zoneId
+        ? [
+            { centreId },
+            { centreId: null, zoneId: centre.zoneId },
+          ]
+        : [{ centreId }];
+    }
+    if (query.zoneId) {
+      where.zoneId = query.zoneId;
+    }
+    return where;
+  }
+
   async kpi(user: AuthenticatedUser, query: DashboardQueryDto) {
     const where = await this.buildWhere(user, query);
+    const alertWhere = await this.buildAlertWhere(user, query);
 
     const [confirmed, deces, total, activeAlertes] = await Promise.all([
       this.prisma.casEpidemiologique.count({
@@ -65,7 +102,7 @@ export class DashboardService {
         },
       }),
       this.prisma.casEpidemiologique.count({ where }),
-      this.prisma.alerte.count({ where: { statutAlerte: StatutAlerte.Active } }),
+      this.prisma.alerte.count({ where: alertWhere }),
     ]);
 
     const letalite =

@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
@@ -29,6 +30,16 @@ export class DashboardQueryDto {
   @IsInt()
   @Min(1)
   maladieId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Centre de santé (0 = tous les centres)',
+    example: 2,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  centreId?: number;
 
   @ApiPropertyOptional({ description: 'Dimension de répartition', enum: ['maladie', 'statut'] })
   @IsOptional()
