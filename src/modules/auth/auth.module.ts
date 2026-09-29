@@ -29,6 +29,8 @@ import { EmailModule } from '../email/email.module';
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(RateLimitMiddleware).forRoutes('*');
+    // Syntaxe compatible avec path-to-regexp v8 : le paramètre nommé couvre
+    // toutes les routes sous le préfixe global `/api`.
+    consumer.apply(RateLimitMiddleware).forRoutes('{*path}');
   }
 }
