@@ -8,11 +8,15 @@ BEGIN;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'maladies' AND column_name = 'seuil_alerte_centre') THEN
     ALTER TABLE maladies ADD COLUMN seuil_alerte_centre INTEGER NOT NULL DEFAULT 1;
-    UPDATE maladies SET seuil_alerte_centre = GREATEST(1, CEIL(seuil_alerte::numeric / 2)::integer);
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'maladies' AND column_name = 'seuil_alerte') THEN
+      UPDATE maladies SET seuil_alerte_centre = GREATEST(1, CEIL(seuil_alerte::numeric / 2)::integer);
+    END IF;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'maladies' AND column_name = 'seuil_alerte_region') THEN
     ALTER TABLE maladies ADD COLUMN seuil_alerte_region INTEGER NOT NULL DEFAULT 1;
-    UPDATE maladies SET seuil_alerte_region = GREATEST(1, seuil_alerte);
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = 'maladies' AND column_name = 'seuil_alerte') THEN
+      UPDATE maladies SET seuil_alerte_region = GREATEST(1, seuil_alerte);
+    END IF;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'maladies'::regclass AND conname = 'maladies_seuil_centre_positive') THEN
     ALTER TABLE maladies ADD CONSTRAINT maladies_seuil_centre_positive CHECK (seuil_alerte_centre >= 1);
@@ -25,8 +29,19 @@ END $$;
 -- Keep the deprecated column during transition (same strategy as legacy lab
 -- columns on cases). New application writes mirror the regional value there.
 -- Drop it only in a later migration after all old clients have been retired.
-COMMENT ON COLUMN maladies.seuil_alerte IS
-  'Deprecated: use seuil_alerte_centre and seuil_alerte_region.';
+-- Older deployments may already have removed the legacy column through
+-- `prisma db push`; commenting it must therefore remain conditional.
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'maladies'
+      AND column_name = 'seuil_alerte'
+  ) THEN
+    COMMENT ON COLUMN maladies.seuil_alerte IS
+      'Deprecated: use seuil_alerte_centre and seuil_alerte_region.';
+  END IF;
+END $$;
 
 -- NULL centre means administrative alert; non-NULL means establishment alert.
 -- All existing alerts remain administrative alerts, retaining their history.

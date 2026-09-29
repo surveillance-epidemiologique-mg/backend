@@ -42,6 +42,9 @@ export class CarteService {
   private readonly centresCache = new TtlCache<GeoJsonCollection>(300_000);
   private readonly alertesCache = new TtlCache<GeoJsonCollection>(30_000);
   private readonly clustersCache = new TtlCache<GeoJsonCollection>(60_000);
+  private readonly regionSummaryCache = new TtlCache<
+    Map<string, { gravite: string; riskLevel: string }>
+  >(30_000);
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -57,7 +60,10 @@ export class CarteService {
     }
   }
 
-  private async regionAlertSummary(maladieId?: number): Promise<
+  private async regionAlertSummary(
+    maladieId?: number,
+    forceRefresh = false,
+  ): Promise<
     Map<
       string,
       {
@@ -66,6 +72,12 @@ export class CarteService {
       }
     >
   > {
+    const cacheKey = String(maladieId ?? 'all');
+    if (!forceRefresh) {
+      const cached = this.regionSummaryCache.get(cacheKey);
+      if (cached) return cached;
+    }
+
     const zones = await this.prisma.zoneAdministrative.findMany({
       select: { id: true, name: true, type: true, parentId: true },
     });
@@ -97,6 +109,7 @@ export class CarteService {
       }
     }
 
+    this.regionSummaryCache.set(cacheKey, summary);
     return summary;
   }
 
@@ -239,7 +252,7 @@ export class CarteService {
       FROM zones_administratives z
       WHERE z.type_zone = 'Region' AND z.geometrie IS NOT NULL`;
 
-    const alertesByRegion = await this.regionAlertSummary(maladieId);
+    const alertesByRegion = await this.regionAlertSummary(maladieId, forceRefresh);
     const features: GeoJsonFeature[] = [];
 
     for (const row of rows) {
@@ -542,17 +555,18 @@ export class CarteService {
       orderBy: { name: 'asc' },
     });
 
-    const cas = await this.prisma.casEpidemiologique.findMany({
-      where: {
-        centreId: { in: centres.map((c) => c.id) },
-        ...(maladieId !== undefined ? { maladieId } : {}),
-      },
-      select: { diagnosticStatus: true },
-    });
-    const casTotal = cas.length;
-    const casConfirmes = cas.filter(
-      (c) => c.diagnosticStatus === StatutDiag.Confirme,
-    ).length;
+    const caseWhere: Prisma.CasEpidemiologiqueWhereInput = {
+      centreId: { in: centres.map((c) => c.id) },
+      ...(maladieId !== undefined ? { maladieId } : {}),
+    };
+    // Les compteurs sont calculés directement par PostgreSQL : aucun transfert
+    // de toutes les lignes de cas ni filtrage en mémoire pour une simple KPI.
+    const [casTotal, casConfirmes] = await Promise.all([
+      this.prisma.casEpidemiologique.count({ where: caseWhere }),
+      this.prisma.casEpidemiologique.count({
+        where: { ...caseWhere, diagnosticStatus: StatutDiag.Confirme },
+      }),
+    ]);
 
     const alertes = await this.prisma.alerte.findMany({
       where: {

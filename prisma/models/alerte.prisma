@@ -14,5 +14,7 @@ model Alerte {
   centre  CentreSante?       @relation(fields: [centreId], references: [id], onDelete: Restrict)
 
   @@index([centreId], map: "idx_alertes_centre")
+  @@index([statutAlerte, zoneId, maladieId], map: "idx_alertes_statut_zone_maladie")
+  @@index([statutAlerte, centreId, maladieId], map: "idx_alertes_statut_centre_maladie")
   @@map("alertes")
 }

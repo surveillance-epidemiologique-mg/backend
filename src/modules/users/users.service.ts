@@ -11,6 +11,7 @@ import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { INVITABLE_ROLES } from '../../common/constants/roles';
+import { TtlCache } from '../../common/cache/ttl-cache';
 import type { RoleName } from '../../common/constants/roles';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -32,6 +33,13 @@ type UserSafe = Prisma.UtilisateurGetPayload<typeof userSafeListArgs>;
 
 @Injectable()
 export class UsersService {
+  private readonly rolesCache = new TtlCache<ReturnType<typeof this.listRoles>>(
+    300_000,
+  );
+  private readonly centresCache = new TtlCache<ReturnType<typeof this.listCentres>>(
+    60_000,
+  );
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
@@ -142,17 +150,29 @@ export class UsersService {
     };
   }
 
-  async listRoles() {
-    return this.prisma.role.findMany({
+  listRoles() {
+    const cached = this.rolesCache.get('all');
+    if (cached) {
+      return cached;
+    }
+    const data = this.prisma.role.findMany({
       orderBy: { id: 'asc' },
     });
+    this.rolesCache.set('all', data);
+    return data;
   }
 
-  async listCentres() {
-    return this.prisma.centreSante.findMany({
+  listCentres() {
+    const cached = this.centresCache.get('all');
+    if (cached) {
+      return cached;
+    }
+    const data = this.prisma.centreSante.findMany({
       include: { zone: true },
       orderBy: { name: 'asc' },
     });
+    this.centresCache.set('all', data);
+    return data;
   }
 
   async updateUser(id: number, dto: UpdateUserDto): Promise<UserSafe> {

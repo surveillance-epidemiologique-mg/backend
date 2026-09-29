@@ -98,7 +98,7 @@ export class CasController {
     return this.casService.updateResult(userId, id, dto);
   }
 
-  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Post(':id/analyses')
   @ApiOperation({
     summary:

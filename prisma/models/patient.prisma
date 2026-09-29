@@ -10,5 +10,6 @@ model Patient {
   residenceZone ZoneAdministrative?  @relation(fields: [residenceZoneId], references: [id], onDelete: SetNull)
   cas           CasEpidemiologique[]
 
+  @@index([namePatient], map: "idx_patients_name")
   @@map("patients")
 }

@@ -90,20 +90,28 @@ export class DashboardService {
     const where = await this.buildWhere(user, query);
     const alertWhere = await this.buildAlertWhere(user, query);
 
-    const [confirmed, deces, total, activeAlertes] = await Promise.all([
-      this.prisma.casEpidemiologique.count({
-        where: { ...where, diagnosticStatus: StatutDiag.Confirme },
+    const [statusGroups, activeAlertes] = await Promise.all([
+      // Une seule agrégation remplace trois COUNT séparés sur la même fenêtre
+      // filtrée (moins de scans et moins d'allers-retours vers PostgreSQL).
+      this.prisma.casEpidemiologique.groupBy({
+        by: ['diagnosticStatus', 'clinicalOutcome'],
+        where,
+        _count: { _all: true },
       }),
-      this.prisma.casEpidemiologique.count({
-        where: {
-          ...where,
-          diagnosticStatus: StatutDiag.Confirme,
-          clinicalOutcome: IssueClinique.Deces,
-        },
-      }),
-      this.prisma.casEpidemiologique.count({ where }),
       this.prisma.alerte.count({ where: alertWhere }),
     ]);
+
+    let confirmed = 0;
+    let deces = 0;
+    let total = 0;
+    for (const group of statusGroups) {
+      const count = group._count._all;
+      total += count;
+      if (group.diagnosticStatus === StatutDiag.Confirme) {
+        confirmed += count;
+        if (group.clinicalOutcome === IssueClinique.Deces) deces += count;
+      }
+    }
 
     const letalite =
       confirmed > 0 ? Number(((deces / confirmed) * 100).toFixed(1)) : 0;

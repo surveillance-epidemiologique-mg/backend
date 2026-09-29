@@ -26,5 +26,6 @@ model Utilisateur {
   analyses      Analyse[]            @relation("AnalyseLaboratoire")
   notifications Notification[]
 
+  @@index([centreId, roleId], map: "idx_utilisateurs_centre_role")
   @@map("utilisateurs")
 }

@@ -13,5 +13,6 @@ model CentreSante {
   cas     CasEpidemiologique[]
   alertes Alerte[]
 
+  @@index([zoneId], map: "idx_centres_zone")
   @@map("centres_sante")
 }

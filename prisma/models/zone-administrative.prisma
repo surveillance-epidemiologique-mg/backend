@@ -13,5 +13,6 @@ model ZoneAdministrative {
   patients Patient[]
   alertes  Alerte[]
 
+  @@index([parentId, type], map: "idx_zones_parent_type")
   @@map("zones_administratives")
 }

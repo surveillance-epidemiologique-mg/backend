@@ -36,6 +36,10 @@ model CasEpidemiologique {
   @@index([agentId], map: "idx_cas_agent")
   @@index([maladieId], map: "idx_cas_maladie")
   @@index([diagnosisDate], map: "idx_cas_dates")
+  @@index([declarationDate], map: "idx_cas_declaration_date")
   @@index([diagnosticStatus, clinicalOutcome], map: "idx_cas_diag_issue")
+  @@index([centreId, diagnosticStatus], map: "idx_cas_centre_statut")
+  @@index([maladieId, diagnosisDate], map: "idx_cas_maladie_date")
+  @@index([centreId, maladieId, diagnosisDate], map: "idx_cas_centre_maladie_date")
   @@map("cas_epidemiologiques")
 }

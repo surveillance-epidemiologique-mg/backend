@@ -16,5 +16,7 @@ model Analyse {
   @@index([casId], map: "idx_analyses_cas")
   @@index([laboratoryId], map: "idx_analyses_laboratoire")
   @@index([statut], map: "idx_analyses_statut")
+  @@index([casId, statut], map: "idx_analyses_cas_statut")
+  @@index([laboratoryId, statut], map: "idx_analyses_laboratoire_statut")
   @@map("analyses")
 }
