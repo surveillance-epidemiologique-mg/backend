@@ -11,6 +11,7 @@ import { Prisma, StatutAnalyse, StatutDiag, TypeResultatAttendu } from '../../..
 import { ROLES } from '../../common/constants/roles';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../email/email.service';
 import { CreateCaseDto } from './dto/create-case.dto';
 import { CreateAnalyseDto } from './dto/create-analyse.dto';
@@ -57,13 +58,20 @@ export class CasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly configService: ConfigService,
   ) {}
 
+  private laboratoryCanDeclareCases(): boolean {
+    return this.configService.get<boolean>('laboratoryCanDeclareCases') === true;
+  }
+
   async declare(user: AuthenticatedUser, dto: CreateCaseDto) {
-    const isMedecin = user.role === ROLES.MEDECIN;
+    const actsAsMedecin =
+      user.role === ROLES.MEDECIN ||
+      (user.role === ROLES.LABORATOIRE && this.laboratoryCanDeclareCases());
 
     let centreId: number;
-    if (isMedecin) {
+    if (actsAsMedecin) {
       const utilisateur = await this.prisma.utilisateur.findUnique({
         where: { id: user.id },
         select: { centreId: true },
@@ -135,9 +143,11 @@ export class CasService {
   }
 
   async listForUser(user: AuthenticatedUser, query: ListCasesQueryDto) {
-    const isMedecin = user.role === ROLES.MEDECIN;
+    const actsAsMedecin =
+      user.role === ROLES.MEDECIN ||
+      (user.role === ROLES.LABORATOIRE && this.laboratoryCanDeclareCases());
 
-    if (isMedecin) {
+    if (actsAsMedecin) {
       const utilisateur = await this.prisma.utilisateur.findUnique({
         where: { id: user.id },
         select: { centreId: true },
@@ -160,7 +170,11 @@ export class CasService {
     });
   }
 
-  async findOne(user: AuthenticatedUser, id: number) {
+  async findOne(
+    user: AuthenticatedUser,
+    id: number,
+    restrictToClinicalCentre = true,
+  ) {
     const cas = await this.prisma.casEpidemiologique.findUnique({
       where: { id },
       include: caseInclude,
@@ -169,7 +183,12 @@ export class CasService {
       throw new NotFoundException('Cas introuvable.');
     }
 
-    if (user.role === ROLES.MEDECIN) {
+    const hasCentreScope =
+      restrictToClinicalCentre &&
+      (user.role === ROLES.MEDECIN ||
+        (user.role === ROLES.LABORATOIRE &&
+          this.laboratoryCanDeclareCases()));
+    if (hasCentreScope) {
       const utilisateur = await this.prisma.utilisateur.findUnique({
         where: { id: user.id },
         select: { centreId: true },
@@ -182,11 +201,17 @@ export class CasService {
     return cas;
   }
 
+  async findOneForLaboratory(user: AuthenticatedUser, id: number) {
+    return this.findOne(user, id, false);
+  }
+
   async listYears(user: AuthenticatedUser) {
-    const isMedecin = user.role === ROLES.MEDECIN;
+    const actsAsMedecin =
+      user.role === ROLES.MEDECIN ||
+      (user.role === ROLES.LABORATOIRE && this.laboratoryCanDeclareCases());
     let where: Prisma.CasEpidemiologiqueWhereInput = {};
 
-    if (isMedecin) {
+    if (actsAsMedecin) {
       const utilisateur = await this.prisma.utilisateur.findUnique({
         where: { id: user.id },
         select: { centreId: true },
@@ -205,6 +230,15 @@ export class CasService {
       orderBy: { diagnosisDate: 'asc' },
     });
 
+    return Array.from(new Set(rows.map((r) => r.diagnosisDate.getFullYear())));
+  }
+
+  async listYearsForLaboratory() {
+    const rows = await this.prisma.casEpidemiologique.findMany({
+      select: { diagnosisDate: true },
+      distinct: ['diagnosisDate'],
+      orderBy: { diagnosisDate: 'asc' },
+    });
     return Array.from(new Set(rows.map((r) => r.diagnosisDate.getFullYear())));
   }
 

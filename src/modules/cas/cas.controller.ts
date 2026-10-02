@@ -19,6 +19,7 @@ import { ValidateCaseDto } from './dto/validate-case.dto';
 import { UpdateResultDto } from './dto/update-result.dto';
 import { UpdateIssueDto } from './dto/update-issue.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { AllowLaboratoryCaseAccess } from '../../common/decorators/lab-case-access.decorator';
 import { ROLES } from '../../common/constants/roles';
 import {
   CurrentUser,
@@ -31,6 +32,7 @@ import {
 export class CasController {
   constructor(private readonly casService: CasService) {}
 
+  @AllowLaboratoryCaseAccess()
   @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Post()
   @ApiOperation({ summary: 'Déclarer un cas suspect ou confirmé' })
@@ -41,11 +43,12 @@ export class CasController {
     return this.casService.declare(user, dto);
   }
 
-  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @AllowLaboratoryCaseAccess()
+  @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Get()
   @ApiOperation({
     summary:
-      'Lister les cas (Admin/Labo : tous ; Médecin : uniquement ceux de son centre)',
+      'Lister les cas (Admin : tous ; Médecin/Labo autorisé : uniquement ceux de son centre)',
   })
   list(
     @CurrentUser() user: AuthenticatedUser,
@@ -54,7 +57,8 @@ export class CasController {
     return this.casService.listForUser(user, query);
   }
 
-  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @AllowLaboratoryCaseAccess()
+  @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Get('years')
   @ApiOperation({
     summary: 'Années disponibles de date_diagnostic (selon la visibilité du rôle)',
@@ -74,6 +78,13 @@ export class CasController {
   }
 
   @Roles(ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Get('laboratoire/years')
+  @ApiOperation({ summary: 'Années disponibles pour le module Laboratoire' })
+  laboratoryYears() {
+    return this.casService.listYearsForLaboratory();
+  }
+
+  @Roles(ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('laboratoire')
   @ApiOperation({
     summary: 'Cas avec analyses en attente ou traitées par le laboratoire',
@@ -83,6 +94,16 @@ export class CasController {
     @Query() query: ListCasesQueryDto,
   ) {
     return this.casService.laboratoirePending(user, query);
+  }
+
+  @Roles(ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Get('laboratoire/:id')
+  @ApiOperation({ summary: 'Récupérer un cas depuis le module Laboratoire' })
+  laboratoryFindOne(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.casService.findOneForLaboratory(user, id);
   }
 
   @Roles(ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
@@ -98,6 +119,7 @@ export class CasController {
     return this.casService.updateResult(userId, id, dto);
   }
 
+  @AllowLaboratoryCaseAccess()
   @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Post(':id/analyses')
   @ApiOperation({
@@ -145,7 +167,8 @@ export class CasController {
     return this.casService.validateCase(userId, id, dto);
   }
 
-  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @AllowLaboratoryCaseAccess()
+  @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Get(':id')
   @ApiOperation({
     summary:

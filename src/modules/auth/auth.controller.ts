@@ -54,6 +54,17 @@ export class AuthController {
   }
 
   @TempPasswordAllowed()
+  @Get('permissions')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Récupérer les permissions d’interface de l’utilisateur' })
+  permissions() {
+    return {
+      laboratoryCanDeclareCases:
+        this.configService.get<boolean>('laboratoryCanDeclareCases') === true,
+    };
+  }
+
+  @TempPasswordAllowed()
   @Post('change-password')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Changer le mot de passe' })

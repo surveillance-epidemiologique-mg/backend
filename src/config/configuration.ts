@@ -12,4 +12,7 @@ export default () => ({
   },
   bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS ?? '12', 10),
   frontendUrl: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+  // Les utilisateurs Laboratoire restent limités au module Laboratoire par défaut.
+  // Seule la valeur exacte "true" active l'accès au module Cas clinique.
+  laboratoryCanDeclareCases: process.env.LABO_PEUT_DECLARER_CAS === 'true',
 });
