@@ -1,15 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, type Maladie } from '../../../generated/prisma/client';
 import { TtlCache } from '../../common/cache/ttl-cache';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { CreateMaladieDto } from './dto/create-maladie.dto';
 import { UpdateMaladieDto } from './dto/update-maladie.dto';
+import { AlertesService } from '../alertes/alertes.service';
 
 @Injectable()
 export class MaladiesService {
+  private readonly logger = new Logger(MaladiesService.name);
   private readonly listCache = new TtlCache<Promise<Maladie[]>>(60_000);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly alertesService: AlertesService,
+  ) {}
 
   list() {
     const cached = this.listCache.get('all');
@@ -23,9 +28,9 @@ export class MaladiesService {
     return data;
   }
 
-  create(dto: CreateMaladieDto) {
+  async create(dto: CreateMaladieDto) {
     this.listCache.clear();
-    return this.prisma.maladie.create({
+    const created = await this.prisma.maladie.create({
       data: {
         name: dto.name.trim(),
         icd10Code: dto.icd10Code?.trim().toUpperCase() || null,
@@ -35,6 +40,8 @@ export class MaladiesService {
         description: dto.description,
       },
     });
+    await this.refreshAlerts();
+    return created;
   }
 
   async update(id: number, dto: UpdateMaladieDto) {
@@ -63,6 +70,18 @@ export class MaladiesService {
     }
 
     this.listCache.clear();
-    return this.prisma.maladie.update({ where: { id }, data });
+    const updated = await this.prisma.maladie.update({ where: { id }, data });
+    await this.refreshAlerts();
+    return updated;
+  }
+
+  private async refreshAlerts() {
+    try {
+      await this.alertesService.runDetection();
+    } catch (error) {
+      this.logger.warn(
+        `Recalcul des alertes après modification d'une maladie impossible : ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }

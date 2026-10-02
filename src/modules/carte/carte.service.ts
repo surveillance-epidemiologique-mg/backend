@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   Prisma,
   StatutAlerte,
@@ -9,6 +9,7 @@ import { TtlCache } from '../../common/cache/ttl-cache';
 import { ROLES } from '../../common/constants/roles';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../core/prisma/prisma.service';
+import { AlertesService } from '../alertes/alertes.service';
 
 interface GeoJsonFeature {
   type: 'Feature';
@@ -46,7 +47,10 @@ export class CarteService {
     Map<string, { gravite: string; riskLevel: string }>
   >(30_000);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly alertesService?: AlertesService,
+  ) {}
 
   private collection(features: GeoJsonFeature[]): GeoJsonCollection {
     return { type: 'FeatureCollection', features };
@@ -135,6 +139,9 @@ export class CarteService {
     maladieId?: number,
     forceRefresh = false,
   ): Promise<GeoJsonCollection> {
+    if (forceRefresh) {
+      await this.alertesService?.ensureFresh();
+    }
     const cached = forceRefresh
       ? undefined
       : this.zonesCache.get(String(maladieId ?? 'all'));
@@ -235,6 +242,9 @@ export class CarteService {
     maladieId?: number,
     forceRefresh = false,
   ): Promise<GeoJsonCollection> {
+    if (forceRefresh) {
+      await this.alertesService?.ensureFresh();
+    }
     const cached = forceRefresh
       ? undefined
       : this.regionsCache.get(String(maladieId ?? 'all'));
