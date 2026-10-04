@@ -320,21 +320,43 @@ export class CasService {
     const where = this.buildCasWhere(query);
     delete where.diagnosticStatus;
 
-    if (user.role !== ROLES.ADMINISTRATEUR) {
-      // Agent Laboratoire : conserver les cas qui ont encore une analyse
-      // demandée ou au moins une analyse réalisée par cet agent. Le statut
-      // global du cas peut déjà être confirmé alors qu'une analyse
-      // complémentaire reste en attente.
-      where.OR = [
-        { analyses: { some: { statut: StatutAnalyse.Demandee } } },
-        {
-          analyses: {
-            some: { statut: StatutAnalyse.Realisee, laboratoryId: user.id },
-          },
+    // Le classement s'applique avant skip/take : un onglet ne doit pas paraître
+    // vide simplement parce que ses cas se trouvent sur une page suivante.
+    const pending: Prisma.CasEpidemiologiqueWhereInput = {
+      analyses: { some: { statut: StatutAnalyse.Demandee } },
+    };
+    const processed: Prisma.CasEpidemiologiqueWhereInput = {
+      analyses: {
+        some: {
+          statut: StatutAnalyse.Realisee,
+          ...(user.role === ROLES.ADMINISTRATEUR
+            ? {}
+            : { laboratoryId: user.id }),
         },
-      ];
+      },
+    };
+
+    if (query.laboratoryView === 'pending') {
+      Object.assign(where, pending);
+    } else if (query.laboratoryView === 'processed') {
+      Object.assign(where, processed);
+    } else if (user.role !== ROLES.ADMINISTRATEUR) {
+      // Pour un agent, « Tous » rassemble les demandes en attente et les
+      // analyses qu'il a lui-même réalisées, même si d'autres agents ont
+      // également travaillé sur le même cas.
+      where.OR = [pending, processed];
     }
     // Admin : tous les cas (en attente + traités), tous centres/laboratoires.
+
+    if (query.page && query.limit) {
+      return this.prisma.casEpidemiologique.findMany({
+        where,
+        include: caseInclude,
+        orderBy: { declarationDate: 'asc' },
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      });
+    }
 
     return this.prisma.casEpidemiologique.findMany({
       where,

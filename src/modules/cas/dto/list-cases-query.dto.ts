@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsEnum,
   IsIn,
@@ -12,6 +13,8 @@ import { StatutDiag } from '../../../../generated/prisma/client';
 
 export const AGE_RANGES = ['0-5', '6-17', '18-35', '36-60', '60+'] as const;
 export type AgeRange = (typeof AGE_RANGES)[number];
+export const LABORATORY_VIEWS = ['all', 'pending', 'processed'] as const;
+export type LaboratoryView = (typeof LABORATORY_VIEWS)[number];
 
 export const AGE_BOUNDS: Record<AgeRange, { min: number; max: number | null }> = {
   '0-5': { min: 0, max: 5 },
@@ -22,6 +25,29 @@ export const AGE_BOUNDS: Record<AgeRange, { min: number; max: number | null }> =
 };
 
 export class ListCasesQueryDto {
+  @ApiPropertyOptional({
+    description: 'Onglet du module Laboratoire : tous, en attente ou traités',
+    enum: LABORATORY_VIEWS,
+  })
+  @IsOptional()
+  @IsIn(LABORATORY_VIEWS)
+  laboratoryView?: LaboratoryView;
+
+  @ApiPropertyOptional({ description: 'Numéro de page pour la pagination', example: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ description: 'Nombre de cas par page', example: 10, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
   @ApiPropertyOptional({
     description: "Recherche par nom du patient (name_patient) ou code anonyme (code_anonyme)",
     example: 'PAT-2026',
