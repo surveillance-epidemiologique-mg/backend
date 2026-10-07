@@ -238,7 +238,7 @@ export class EmailService implements OnModuleInit {
             Activer mon compte
           </a>
         </p>
-        <p style="color:#6b7280; font-size: 13px;">Ce lien est temporaire et sécurisé. Il expire sous 24 heures et ne peut être utilisé qu'une seule fois.</p>
+        <p style="color:#6b7280; font-size: 13px;">Ce lien est temporaire et sécurisé. Il expire sous 7 jours et ne peut être utilisé qu'une seule fois.</p>
         <p style="color:#6b7280; font-size: 13px;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : <br/>${activationLink}</p>
         <p style="color:#6b7280; font-size: 12px;">Si vous n'êtes pas à l'origine de cette demande, veuillez ignorer cet e-mail.</p>
         <p style="color:#6b7280; font-size: 12px;">Cordialement,<br/>Équipe ÉpiSuivi</p>
@@ -287,7 +287,7 @@ export class EmailService implements OnModuleInit {
           </a>
         </p>
         <p style="color:#6b7280; font-size: 13px;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : <br/>${activationLink}</p>
-        <p style="color:#6b7280; font-size: 12px;">Ce lien d'activation est à usage unique et expire après utilisation. Merci de ne pas répondre à cet e-mail.</p>
+        <p style="color:#6b7280; font-size: 12px;">Ce lien d'activation est à usage unique et expire sous 7 jours. Si nécessaire, demandez un nouveau lien depuis la page d'activation. Merci de ne pas répondre à cet e-mail.</p>
       </div>
     `;
   }

@@ -11,6 +11,7 @@ import { Prisma } from '../../../generated/prisma/client';
 import { PrismaService } from '../../core/prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { INVITABLE_ROLES } from '../../common/constants/roles';
+import { INVITATION_TTL_MS } from '../../common/constants/invitation';
 import { TtlCache } from '../../common/cache/ttl-cache';
 import type { RoleName } from '../../common/constants/roles';
 import { InviteUserDto } from './dto/invite-user.dto';
@@ -30,6 +31,15 @@ const userSafeListArgs = {
 } as const;
 
 type UserSafe = Prisma.UtilisateurGetPayload<typeof userSafeListArgs>;
+type PendingInvitation = {
+  id: number;
+  name: string;
+  email: string;
+  resetToken: string | null;
+  invitationExpiresAt: Date | null;
+  temporaryPassword: boolean;
+  isActive: boolean;
+};
 
 @Injectable()
 export class UsersService {
@@ -109,6 +119,7 @@ export class UsersService {
       this.configService.get<number>('bcryptRounds') ?? 12,
     );
     const resetToken = crypto.randomBytes(32).toString('hex');
+    const invitationExpiresAt = new Date(Date.now() + INVITATION_TTL_MS);
 
     const utilisateur = await this.prisma.utilisateur.create({
       data: {
@@ -118,6 +129,7 @@ export class UsersService {
         passwordHash,
         temporaryPassword: true,
         resetToken,
+        invitationExpiresAt,
         isActive: true,
         roleId: role.id,
         centreId: dto.centreId,
@@ -148,6 +160,105 @@ export class UsersService {
       temporaryPassword,
       activationLink,
     };
+  }
+
+  async resendInvitationById(id: number): Promise<UserSafe> {
+    const user = await this.prisma.utilisateur.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('Utilisateur introuvable.');
+    }
+    if (!user.temporaryPassword || !user.isActive) {
+      throw new BadRequestException(
+        "Seule l'invitation d'un compte actif non encore activé peut être renvoyée.",
+      );
+    }
+
+    return this.sendReplacementInvitation(user);
+  }
+
+  async resendExpiredInvitationByToken(token: string) {
+    const response = {
+      success: true,
+      message:
+        "Si ce lien a expiré, une nouvelle invitation a été envoyée à l'adresse du compte.",
+    };
+    if (!/^[a-f0-9]{64}$/i.test(token)) return response;
+
+    const user = await this.prisma.utilisateur.findUnique({
+      where: { resetToken: token },
+    });
+    if (
+      !user ||
+      !user.isActive ||
+      !user.temporaryPassword ||
+      !user.invitationExpiresAt
+    ) {
+      return response;
+    }
+    if (user.invitationExpiresAt.getTime() > Date.now()) {
+      return {
+        success: false,
+        message:
+          'Ce lien est encore valide. Vous pouvez activer votre compte avec ce lien.',
+      };
+    }
+
+    try {
+      await this.sendReplacementInvitation(user);
+    } catch (error) {
+      // Un autre renvoi peut avoir remplacé le jeton entre la lecture et l'écriture.
+      if (error instanceof ConflictException) return response;
+      throw error;
+    }
+    return response;
+  }
+
+  private async sendReplacementInvitation(
+    user: PendingInvitation,
+  ): Promise<UserSafe> {
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const invitationExpiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+    const updated = await this.prisma.utilisateur.updateMany({
+      where: {
+        id: user.id,
+        resetToken: user.resetToken,
+        temporaryPassword: true,
+        isActive: true,
+      },
+      data: { resetToken, invitationExpiresAt },
+    });
+    if (updated.count !== 1) {
+      throw new ConflictException(
+        "L'invitation a déjà été renouvelée. Rechargez la liste.",
+      );
+    }
+
+    const frontendUrl =
+      this.configService.get<string>('frontendUrl') ?? 'http://localhost:3000';
+    try {
+      await this.emailService.sendActivationEmail({
+        to: user.email,
+        name: user.name,
+        activationLink: `${frontendUrl}/activate?token=${resetToken}`,
+      });
+    } catch (error) {
+      // Restaurer l'ancien lien si l'envoi échoue, sans écraser un renvoi plus récent.
+      await this.prisma.utilisateur.updateMany({
+        where: { id: user.id, resetToken },
+        data: {
+          resetToken: user.resetToken,
+          invitationExpiresAt: user.invitationExpiresAt,
+        },
+      });
+      throw error;
+    }
+
+    const refreshed = await this.prisma.utilisateur.findUnique({
+      where: { id: user.id },
+      ...userSafeListArgs,
+    });
+    if (!refreshed) throw new NotFoundException('Utilisateur introuvable.');
+    return refreshed;
   }
 
   listRoles() {

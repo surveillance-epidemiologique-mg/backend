@@ -147,21 +147,48 @@ export class AuthService {
         "Lien d'activation invalide ou déjà utilisé.",
       );
     }
+    if (
+      !utilisateur.invitationExpiresAt ||
+      utilisateur.invitationExpiresAt.getTime() <= Date.now()
+    ) {
+      throw new BadRequestException(
+        "Ce lien d'invitation a expiré. Demandez un nouvel envoi depuis cette page.",
+      );
+    }
+    if (!utilisateur.temporaryPassword || !utilisateur.isActive) {
+      throw new BadRequestException(
+        "Lien d'activation invalide ou déjà utilisé.",
+      );
+    }
 
     const newHash = await bcrypt.hash(
       dto.newPassword,
       this.configService.get<number>('bcryptRounds') ?? 12,
     );
 
-    const updated = await this.prisma.utilisateur.update({
-      where: { id: utilisateur.id },
+    const result = await this.prisma.utilisateur.updateMany({
+      where: {
+        id: utilisateur.id,
+        resetToken: dto.token,
+        invitationExpiresAt: { gt: new Date() },
+        temporaryPassword: true,
+        isActive: true,
+      },
       data: {
         passwordHash: newHash,
         temporaryPassword: false,
         resetToken: null,
+        invitationExpiresAt: null,
       },
+    });
+    if (result.count !== 1) {
+      throw new BadRequestException("Lien d'activation invalide ou expiré.");
+    }
+    const updated = await this.prisma.utilisateur.findUnique({
+      where: { id: utilisateur.id },
       ...userSafeArgs,
     });
+    if (!updated) throw new BadRequestException('Utilisateur introuvable.');
 
     const token = await this.signToken(updated);
 

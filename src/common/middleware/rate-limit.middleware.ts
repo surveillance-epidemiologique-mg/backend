@@ -24,6 +24,7 @@ export class RateLimitMiddleware implements NestMiddleware {
       req.method === 'POST' &&
       (path === '/api/auth/login' ||
         path === '/api/auth/forgot-password' ||
+        path === '/api/auth/resend-invitation' ||
         path === '/api/auth/verify-reset-code' ||
         path === '/api/auth/reset-password');
     if (!isProtected) {

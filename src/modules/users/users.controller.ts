@@ -39,6 +39,13 @@ export class UsersController {
   }
 
   @Roles(ROLES.ADMINISTRATEUR)
+  @Post(':id/resend-invitation')
+  @ApiOperation({ summary: "Renvoyer l'invitation d'un compte non activé" })
+  resendInvitation(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.resendInvitationById(id);
+  }
+
+  @Roles(ROLES.ADMINISTRATEUR)
   @Get()
   @ApiOperation({ summary: 'Lister les utilisateurs' })
   listUsers() {
