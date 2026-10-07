@@ -47,13 +47,14 @@ describe('UsersService invitation renewal', () => {
     return { service, findUnique, updateMany, sendActivationEmail };
   }
 
-  it('remplace un lien expiré et envoie un nouveau jeton valable 7 jours', async () => {
+  it('renvoie sur demande admin un nouveau lien valable 7 jours', async () => {
     const { service, findUnique, updateMany, sendActivationEmail } = setup();
     findUnique.mockResolvedValueOnce(user).mockResolvedValueOnce(user);
 
-    const result = await service.resendExpiredInvitationByToken(token);
+    const result = await service.resendInvitationById(user.id);
 
-    expect(result.success).toBe(true);
+    expect(result).toEqual(user);
+    expect(findUnique).toHaveBeenNthCalledWith(1, { where: { id: user.id } });
     expect(updateMany).toHaveBeenCalledTimes(1);
     const replacement = updateMany.mock.calls[0][0].data;
     expect(replacement.resetToken).not.toBe(token);
@@ -65,16 +66,17 @@ describe('UsersService invitation renewal', () => {
     expect(sent.activationLink).toContain(replacement.resetToken);
   });
 
-  it('ne renvoie pas un lien encore valide', async () => {
+  it('refuse le renvoi pour un compte déjà activé', async () => {
     const { service, findUnique, updateMany, sendActivationEmail } = setup();
     findUnique.mockResolvedValue({
       ...user,
-      invitationExpiresAt: new Date(Date.now() + 60_000),
+      temporaryPassword: false,
     });
 
-    const result = await service.resendExpiredInvitationByToken(token);
+    await expect(service.resendInvitationById(user.id)).rejects.toThrow(
+      "Seule l'invitation d'un compte actif non encore activé peut être renvoyée.",
+    );
 
-    expect(result.success).toBe(false);
     expect(updateMany).not.toHaveBeenCalled();
     expect(sendActivationEmail).not.toHaveBeenCalled();
   });
@@ -84,7 +86,7 @@ describe('UsersService invitation renewal', () => {
     findUnique.mockResolvedValue(user);
     sendActivationEmail.mockRejectedValue(new Error('E-mail indisponible'));
 
-    await expect(service.resendExpiredInvitationByToken(token)).rejects.toThrow(
+    await expect(service.resendInvitationById(user.id)).rejects.toThrow(
       'E-mail indisponible',
     );
     expect(updateMany).toHaveBeenCalledTimes(2);

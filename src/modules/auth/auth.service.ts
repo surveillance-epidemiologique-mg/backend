@@ -152,7 +152,7 @@ export class AuthService {
       utilisateur.invitationExpiresAt.getTime() <= Date.now()
     ) {
       throw new BadRequestException(
-        "Ce lien d'invitation a expiré. Demandez un nouvel envoi depuis cette page.",
+        "Ce lien d'invitation a expiré. Contactez un administrateur pour recevoir un nouveau lien.",
       );
     }
     if (!utilisateur.temporaryPassword || !utilisateur.isActive) {

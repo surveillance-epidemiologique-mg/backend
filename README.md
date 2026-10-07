@@ -61,7 +61,7 @@ $ pnpm run test:cov
 
 ### Invitations des utilisateurs
 
-Les liens d'activation expirent 7 jours après leur création et ne peuvent servir qu'une fois. Un destinataire dont le lien a expiré peut demander un nouvel envoi depuis la page d'activation. Un administrateur peut aussi utiliser « Renvoyer l'invitation » dans Paramètres > Utilisateurs pour tout compte encore en attente ; chaque renvoi invalide le lien précédent. Les migrations `20261006100000_invitation_expiration` et `20261006110000_extend_invitation_to_7_days` attribuent et prolongent l'échéance des invitations existantes. Appliquer les migrations Prisma avant de démarrer la nouvelle version.
+Les liens d'activation expirent 7 jours après leur création et ne peuvent servir qu'une fois. Seul un administrateur peut utiliser « Renvoyer l'invitation » dans Paramètres > Utilisateurs pour un compte encore en attente ; le destinataire doit le contacter si son lien a expiré. Chaque renvoi invalide le lien précédent. Les migrations `20261006100000_invitation_expiration` et `20261006110000_extend_invitation_to_7_days` attribuent et prolongent l'échéance des invitations existantes. Appliquer les migrations Prisma avant de démarrer la nouvelle version.
 
 ### Accès Laboratoire au module Cas Clinique
 

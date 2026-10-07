@@ -9,8 +9,6 @@ import { ActivateAccountDto } from './dto/activate-account.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { ResendInvitationDto } from './dto/resend-invitation.dto';
-import { UsersService } from '../users/users.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { TempPasswordAllowed } from '../../common/decorators/temp-password-allowed.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -21,7 +19,6 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
-    private readonly usersService: UsersService,
   ) {}
 
   @Public()
@@ -46,13 +43,6 @@ export class AuthController {
     const result = await this.authService.activateAccount(dto);
     this.setAuthCookie(res, result.token);
     return result;
-  }
-
-  @Public()
-  @Post('resend-invitation')
-  @ApiOperation({ summary: "Renvoyer un lien d'invitation expiré" })
-  resendInvitation(@Body() dto: ResendInvitationDto) {
-    return this.usersService.resendExpiredInvitationByToken(dto.token);
   }
 
   @TempPasswordAllowed()

@@ -176,43 +176,6 @@ export class UsersService {
     return this.sendReplacementInvitation(user);
   }
 
-  async resendExpiredInvitationByToken(token: string) {
-    const response = {
-      success: true,
-      message:
-        "Si ce lien a expiré, une nouvelle invitation a été envoyée à l'adresse du compte.",
-    };
-    if (!/^[a-f0-9]{64}$/i.test(token)) return response;
-
-    const user = await this.prisma.utilisateur.findUnique({
-      where: { resetToken: token },
-    });
-    if (
-      !user ||
-      !user.isActive ||
-      !user.temporaryPassword ||
-      !user.invitationExpiresAt
-    ) {
-      return response;
-    }
-    if (user.invitationExpiresAt.getTime() > Date.now()) {
-      return {
-        success: false,
-        message:
-          'Ce lien est encore valide. Vous pouvez activer votre compte avec ce lien.',
-      };
-    }
-
-    try {
-      await this.sendReplacementInvitation(user);
-    } catch (error) {
-      // Un autre renvoi peut avoir remplacé le jeton entre la lecture et l'écriture.
-      if (error instanceof ConflictException) return response;
-      throw error;
-    }
-    return response;
-  }
-
   private async sendReplacementInvitation(
     user: PendingInvitation,
   ): Promise<UserSafe> {
