@@ -535,11 +535,7 @@ export class CarteService {
    * Résumé contextuel d'une zone administrative (panneau d'information de la carte) :
    * centres de santé, alertes actives et comptage des cas.
    */
-  async zoneSummary(
-    zoneId: number,
-    user: AuthenticatedUser,
-    maladieId?: number,
-  ) {
+  async zoneSummary(zoneId: number, maladieId?: number) {
     const zone = await this.prisma.zoneAdministrative.findUnique({
       where: { id: zoneId },
       select: { id: true, name: true, type: true },
@@ -548,7 +544,6 @@ export class CarteService {
       throw new NotFoundException('Zone introuvable.');
     }
 
-    const centreId = await this.centreIdFor(user);
     const descendants = await this.prisma.$queryRaw<{ id_zone: number }[]>`
       WITH RECURSIVE zones AS (
         SELECT id_zone FROM zones_administratives WHERE id_zone = ${zoneId}
@@ -559,7 +554,6 @@ export class CarteService {
     const centres = await this.prisma.centreSante.findMany({
       where: {
         zoneId: { in: zoneIds },
-        ...(centreId !== undefined ? { id: centreId } : {}),
       },
       select: { id: true, name: true, type: true },
       orderBy: { name: 'asc' },

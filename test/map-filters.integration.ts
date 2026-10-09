@@ -132,18 +132,12 @@ async function main() {
     const region = await db.zoneAdministrative.findFirstOrThrow({
       where: { name: 'Atsinanana' },
     });
-    const summary = await carte.zoneSummary(
-      region.id,
-      toAuth(doctor),
-      cholera.id,
-    );
-    assert.equal(summary.casTotal, 6);
-    assert.equal(summary.centres.length, 1);
+    const summary = await carte.zoneSummary(region.id, cholera.id);
+    assert.equal(summary.casTotal, 12);
+    assert.ok(summary.centres.some((centre) => centre.id === doctor.centreId));
+    assert.ok(summary.centres.some((centre) => centre.id === doctor2.centreId));
     assert.equal(summary.alerte?.gravite, 'Critique'); // administrative alert stays global
-    assert.equal(
-      (await carte.zoneSummary(region.id, admin, dengue.id)).casTotal,
-      0,
-    );
+    assert.equal((await carte.zoneSummary(region.id, dengue.id)).casTotal, 0);
     // Several diseases in one region: aggregate=max, filtered=selected disease.
     const rollback = new Error('ROLLBACK_TEST');
     await db

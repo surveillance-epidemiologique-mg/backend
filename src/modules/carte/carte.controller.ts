@@ -60,12 +60,12 @@ export class CarteController {
     return this.carteService.alertesGeoJson(query.refresh);
   }
 
-  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Roles(ROLES.ADMINISTRATEUR)
   @Get('cas')
   @Header('Cache-Control', 'private, no-store')
   @ApiOperation({
     summary:
-      'Cas (GeoJSON points colorés par statut), filtres statut + maladie, Médecin limité à son centre',
+      'Cas (GeoJSON points colorés par statut), filtres statut + maladie, réservé à l’administrateur',
   })
   cas(@CurrentUser() user: AuthenticatedUser, @Query() query: CarteQueryDto) {
     return this.carteService.casGeoJson(
@@ -95,17 +95,15 @@ export class CarteController {
   })
   zoneSummary(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: AuthenticatedUser,
     @Query() query: CarteQueryDto,
   ) {
     return this.carteService.zoneSummary(
       id,
-      user,
       query.id_maladie ?? query.maladieId,
     );
   }
 
-  @Roles(ROLES.MEDECIN, ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
+  @Roles(ROLES.ADMINISTRATEUR)
   @Get('clusters')
   @Header('Cache-Control', 'private, no-store')
   @ApiOperation({ summary: 'Clusters de cas (GeoJSON points)' })
