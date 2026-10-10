@@ -124,22 +124,13 @@ export function buildAlertCandidates(
   return candidates;
 }
 
-export function alertWindowDays(): number {
-  const days = Number(process.env.ALERTE_WINDOW_DAYS ?? 7);
-  if (!Number.isInteger(days) || days < 1)
-    throw new Error('ALERTE_WINDOW_DAYS doit être un entier positif.');
-  return days;
-}
-
 /** Caller supplies a transaction. The same advisory lock serializes the seed,
  * scheduled jobs and manual detections across all application instances. */
 export async function syncAlerts(
   tx: Prisma.TransactionClient,
-  windowDays = alertWindowDays(),
   now = new Date(),
 ) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(20260920, 1)`;
-  const cutoff = new Date(now.getTime() - windowDays * 86400000);
   const [diseases, centres, zones, groups, existing] = await Promise.all([
     tx.maladie.findMany(),
     tx.centreSante.findMany({ select: { id: true, zoneId: true } }),
@@ -150,7 +141,7 @@ export async function syncAlerts(
       by: ['centreId', 'maladieId'],
       where: {
         diagnosticStatus: StatutDiag.Confirme,
-        diagnosisDate: { gte: cutoff, lte: now },
+        diagnosisDate: { lte: now },
       },
       _count: { _all: true },
     }),
@@ -233,5 +224,5 @@ export async function syncAlerts(
         ) WHERE id_alerte = ${saved.id}`;
     }
   }
-  return { created, updated, closed, windowDays };
+  return { created, updated, closed };
 }

@@ -1,8 +1,9 @@
-import { TypeZone } from '../../../generated/prisma/client';
+import { Prisma, StatutDiag, TypeZone } from '../../../generated/prisma/client';
 import {
   buildAlertCandidates,
   computeNiveau,
   alertKey,
+  syncAlerts,
 } from './alert-detection';
 
 const diseases = [{ id: 1, alertThresholdCentre: 3, alertThresholdRegion: 8 }];
@@ -98,6 +99,59 @@ describe('Dual-scale alert detection', () => {
       detectedCaseCount: 2,
       niveauGravite: 'Eleve',
     });
+  });
+  it('compte les anciens cas confirmés sans limite basse, mais exclut les dates futures', async () => {
+    const groupBy = jest
+      .fn()
+      .mockResolvedValue([{ centreId: 1, maladieId: 1, _count: { _all: 2 } }]);
+    const create = jest.fn().mockResolvedValue({ id: 1 });
+    const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      maladie: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 1, alertThresholdCentre: 3, alertThresholdRegion: 2 },
+          ]),
+      },
+      centreSante: {
+        findMany: jest.fn().mockResolvedValue([{ id: 1, zoneId: 100 }]),
+      },
+      zoneAdministrative: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([
+            { id: 100, parentId: null, type: TypeZone.Region },
+          ]),
+      },
+      casEpidemiologique: { groupBy },
+      alerte: { findMany: jest.fn().mockResolvedValue([]), create },
+    } as unknown as Prisma.TransactionClient;
+    const now = new Date('2026-10-10T12:00:00Z');
+
+    const result = await syncAlerts(tx, now);
+
+    expect(groupBy).toHaveBeenCalledWith({
+      by: ['centreId', 'maladieId'],
+      where: {
+        diagnosticStatus: StatutDiag.Confirme,
+        diagnosisDate: { lte: now },
+      },
+      _count: { _all: true },
+    });
+    expect(create).toHaveBeenCalledWith({
+      data: {
+        centreId: null,
+        zoneId: 100,
+        maladieId: 1,
+        detectedCaseCount: 2,
+        niveauGravite: 'Faible',
+        detectionDate: now,
+        statutAlerte: 'Active',
+      },
+    });
+    expect(result).toEqual({ created: 1, updated: 0, closed: 0 });
   });
   it.each([
     [4, 'Faible'],

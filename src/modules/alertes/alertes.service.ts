@@ -53,7 +53,7 @@ export class AlertesService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Both scales use the same transaction and rolling window. */
+  /** Both scales use all confirmed cases diagnosed up to today. */
   async runDetection() {
     const result = await this.prisma.$transaction((tx) => syncAlerts(tx), {
       maxWait: 10000,
@@ -61,7 +61,7 @@ export class AlertesService implements OnModuleInit, OnModuleDestroy {
     });
     this.lastRunAt = Date.now();
     this.logger.log(
-      `Alertes : ${result.created} créées, ${result.updated} mises à jour, ${result.closed} clôturées (${result.windowDays}j)`,
+      `Alertes : ${result.created} créées, ${result.updated} mises à jour, ${result.closed} clôturées (tous les cas confirmés)`,
     );
     return result;
   }

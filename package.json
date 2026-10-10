@@ -29,6 +29,7 @@
     "prisma:push": "npx prisma db push --config ./prisma.config.ts",
     "prisma:seed": "npx prisma db seed --config ./prisma.config.ts",
     "prisma:seed:zones:prod": "ts-node --project tsconfig.seed.json prisma/seed-production-zones.ts",
+    "diagnose:map": "node scripts/diagnose-map-readonly.js",
     "prisma:generate": "npx prisma generate",
     "prisma:format": "npx prisma format --config ./prisma.config.ts",
     "prisma:sync": "npm run prisma:format && npm run prisma:generate && npm run prisma:push && npm run prisma:seed && exit",

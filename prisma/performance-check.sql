@@ -8,8 +8,7 @@ SELECT c.id_cas
 FROM cas_epidemiologiques c
 WHERE c.id_centre = 1
   AND c.statut_diagnostic = 'Confirme'
-  AND c.id_maladie = 1
-  AND c.date_diagnostic >= CURRENT_DATE - INTERVAL '7 days';
+  AND c.id_maladie = 1;
 
 EXPLAIN (ANALYZE, BUFFERS)
 SELECT a.id_cas

@@ -63,7 +63,9 @@ $ pnpm run test:cov
 
 Après les migrations, initialiser les 22 polygones régionaux une fois avec `pnpm prisma:seed:zones:prod` (commande idempotente). Le seed de démonstration `prisma:seed` ne doit pas être exécuté sur les données réelles. Sans géométrie régionale, la carte ne peut pas afficher la choroplèthe.
 
-La couleur est calculée à partir des cas **confirmés** dont la date de diagnostic se situe dans la fenêtre `ALERTE_WINDOW_DAYS` (7 jours par défaut), comparés au `seuil_alerte_region` de chaque maladie. Les centres localisés dans un polygone ADM1 contribuent à ce polygone même si un ancien rattachement administratif en base pointe vers une autre ligne. Les centres sans coordonnées restent associés par leur hiérarchie administrative. Le recalcul s'effectue à l'ouverture de la carte et lors des rafraîchissements.
+La couleur est calculée à partir de **tous les cas confirmés diagnostiqués jusqu'à aujourd'hui**, sans limite de 7 jours, comparés au `seuil_alerte_region` de chaque maladie. Les centres localisés dans un polygone ADM1 contribuent à ce polygone même si un ancien rattachement administratif en base pointe vers une autre ligne. Les centres sans coordonnées restent associés par leur hiérarchie administrative. Le recalcul s'effectue au démarrage du backend, à l'ouverture de la carte et lors des rafraîchissements.
+
+Pour comparer une base locale ou Neon sans modifier ses données, lancer `pnpm diagnose:map` avec son `DATABASE_URL`. La commande utilise une transaction SQL en lecture seule et affiche les totaux de cas confirmés, les seuils, les régions avec géométrie et les alertes actives/clôturées. Les anciens cas confirmés comptent désormais aussi pour la couleur de la carte.
 
 ### Invitations des utilisateurs
 

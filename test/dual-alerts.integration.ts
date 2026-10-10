@@ -22,11 +22,13 @@ async function main() {
     };
     assert.equal(await db.casEpidemiologique.count({ where: demoWhere }), 75);
     assert.equal(await db.analyse.count({ where: { cas: demoWhere } }), 225);
+    // Normalise une base seedée avant ou après la suppression de la fenêtre.
+    await db.$transaction((tx) => syncAlerts(tx), { timeout: 30000 });
     const before = await db.alerte.findMany({
       where: { statutAlerte: 'Active' },
       orderBy: { id: 'asc' },
     });
-    assert.equal(before.length, 15);
+    assert.equal(before.length, 17);
     const runs = await Promise.all(
       [1, 2].map(() =>
         db.$transaction((tx) => syncAlerts(tx), { timeout: 30000 }),
@@ -35,9 +37,8 @@ async function main() {
     for (const run of runs)
       assert.deepEqual(run, {
         created: 0,
-        updated: 15,
+        updated: 17,
         closed: 0,
-        windowDays: 7,
       });
     const after = await db.alerte.findMany({
       where: { statutAlerte: 'Active' },
@@ -60,7 +61,7 @@ async function main() {
     assert.equal(regions.features.length, 22);
     const properties = (name: string) =>
       regions.features.find((f) => f.properties.nom === name)?.properties;
-    assert.equal(properties('Vakinankaratra')?.gravite, null); // centre-only Rougeole
+    assert.equal(properties('Vakinankaratra')?.gravite, 'Faible'); // anciens cas inclus
     assert.equal(properties('Atsinanana')?.gravite, 'Critique');
     assert.equal(properties('Boeny')?.gravite, 'Modere');
     assert.equal(properties('Haute Matsiatra')?.gravite, 'Eleve');
@@ -79,7 +80,7 @@ async function main() {
         COUNT(*) FILTER (WHERE a.id_centre IS NOT NULL
           AND ST_Area(a.emprise_spatiale::geography) BETWEEN 700000 AND 850000)::int AS centres
       FROM alertes a JOIN zones_administratives z USING(id_zone) WHERE a.statut_alerte='Active'`;
-    assert.equal(geometry.regions, 5);
+    assert.equal(geometry.regions, 6);
     assert.equal(geometry.centres, 6);
 
     const rollback = new Error('ROLLBACK_TEST');
@@ -90,16 +91,22 @@ async function main() {
             where: { name: 'Rougeole' },
           });
           const centreAlert = await tx.alerte.findFirstOrThrow({
-            where: { maladieId: rougeole.id, statutAlerte: 'Active' },
+            where: {
+              maladieId: rougeole.id,
+              statutAlerte: 'Active',
+              centreId: { not: null },
+            },
           });
-          assert.equal(centreAlert.detectedCaseCount, 4); // excludes old, probable and suspect cases
+          assert.equal(centreAlert.detectedCaseCount, 9); // anciens inclus, suspects exclus
           await tx.casEpidemiologique.updateMany({
             where: {
               patient: { anonymousCode: { startsWith: 'DEMO-DUAL-old-' } },
             },
             data: { diagnosisDate: new Date(Date.now() + 2 * 86400000) },
           });
-          assert.equal((await syncAlerts(tx)).created, 0); // future diagnoses are not counted
+          const afterFutureDate = await syncAlerts(tx);
+          assert.equal(afterFutureDate.created, 0);
+          assert.equal(afterFutureDate.closed, 2); // seuls les diagnostics futurs sont exclus
           await tx.maladie.update({
             where: { id: rougeole.id },
             data: { alertThresholdCentre: 100 },
@@ -124,22 +131,22 @@ async function main() {
             ).statutAlerte,
             'Cloturee',
           );
-          // The same counts now reach the regional threshold: retain the centre too.
+          // Les 4 cas non futurs atteignent ensuite le nouveau seuil régional.
           await tx.maladie.update({
             where: { id: rougeole.id },
             data: { alertThresholdRegion: 4 },
           });
-          assert.equal((await syncAlerts(tx)).created, 2); // district and region
+          assert.equal((await syncAlerts(tx)).created, 2); // district et région
           assert.equal(
             await tx.alerte.count({
               where: { maladieId: rougeole.id, statutAlerte: 'Active' },
             }),
             3,
           );
-          // Moving all confirmed cases outside the rolling window closes both scales.
+          // Les anciens cas ne sortent plus du calcul : invalider les cas clôt l'alerte.
           await tx.casEpidemiologique.updateMany({
             where: { maladieId: rougeole.id, diagnosticStatus: 'Confirme' },
-            data: { diagnosisDate: new Date('2000-01-01') },
+            data: { diagnosticStatus: 'Invalide' },
           });
           assert.equal((await syncAlerts(tx)).closed, 3);
           throw rollback;
