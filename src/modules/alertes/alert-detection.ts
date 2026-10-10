@@ -3,6 +3,7 @@ import {
   Prisma,
   StatutAlerte,
   StatutDiag,
+  TypeZone,
 } from '../../../generated/prisma/client';
 
 interface DiseaseThresholds {
@@ -13,6 +14,7 @@ interface DiseaseThresholds {
 interface Zone {
   id: number;
   parentId: number | null;
+  type?: TypeZone;
 }
 interface Centre {
   id: number;
@@ -54,6 +56,7 @@ export function buildAlertCandidates(
   centres: Centre[],
   zones: Zone[],
   counts: CaseCount[],
+  spatialRegionByCentre = new Map<number, number>(),
 ): AlertCandidate[] {
   const diseaseById = new Map(diseases.map((d) => [d.id, d]));
   const centreById = new Map(centres.map((c) => [c.id, c]));
@@ -77,18 +80,34 @@ export function buildAlertCandidates(
       });
     }
     let zone = zoneById.get(centre.zoneId);
+    const spatialRegionId = spatialRegionByCentre.get(centre.id);
     const visited = new Set<number>();
     while (zone && !visited.has(zone.id)) {
       visited.add(zone.id);
-      const key = `${zone.id}:${disease.id}`;
+      // En production, un ancien rattachement administratif peut pointer vers
+      // une autre ligne Region que le polygone ADM1. La localisation du centre
+      // fait foi pour la couleur régionale, sans perdre les comptes de district.
+      if (zone.type !== TypeZone.Region || !spatialRegionId) {
+        const key = `${zone.id}:${disease.id}`;
+        const aggregate = zoneCounts.get(key) ?? {
+          zoneId: zone.id,
+          maladieId: disease.id,
+          count: 0,
+        };
+        aggregate.count += row.count;
+        zoneCounts.set(key, aggregate);
+      }
+      zone = zone.parentId == null ? undefined : zoneById.get(zone.parentId);
+    }
+    if (spatialRegionId) {
+      const key = `${spatialRegionId}:${disease.id}`;
       const aggregate = zoneCounts.get(key) ?? {
-        zoneId: zone.id,
+        zoneId: spatialRegionId,
         maladieId: disease.id,
         count: 0,
       };
       aggregate.count += row.count;
       zoneCounts.set(key, aggregate);
-      zone = zone.parentId == null ? undefined : zoneById.get(zone.parentId);
     }
   }
   for (const row of zoneCounts.values()) {
@@ -124,7 +143,9 @@ export async function syncAlerts(
   const [diseases, centres, zones, groups, existing] = await Promise.all([
     tx.maladie.findMany(),
     tx.centreSante.findMany({ select: { id: true, zoneId: true } }),
-    tx.zoneAdministrative.findMany({ select: { id: true, parentId: true } }),
+    tx.zoneAdministrative.findMany({
+      select: { id: true, parentId: true, type: true },
+    }),
     tx.casEpidemiologique.groupBy({
       by: ['centreId', 'maladieId'],
       where: {
@@ -141,6 +162,23 @@ export async function syncAlerts(
       },
     }),
   ]);
+  const countedCentreIds = [...new Set(groups.map((group) => group.centreId))];
+  const spatialRegions = countedCentreIds.length
+    ? await tx.$queryRaw<{ centre_id: number; region_id: number }[]>`
+        SELECT DISTINCT ON (c.id_centre)
+          c.id_centre AS centre_id, r.id_zone AS region_id
+        FROM centres_sante c
+        JOIN zones_administratives r
+          ON r.type_zone = 'Region' AND r.geometrie IS NOT NULL
+          AND ST_Covers(
+            r.geometrie,
+            COALESCE(c.localisation,
+              ST_SetSRID(ST_MakePoint(c.longitude, c.latitude), 4326))
+          )
+        WHERE c.id_centre IN (${Prisma.join(countedCentreIds)})
+        ORDER BY c.id_centre, r.id_zone
+      `
+    : [];
   const candidates = buildAlertCandidates(
     diseases,
     centres,
@@ -150,6 +188,7 @@ export async function syncAlerts(
       maladieId: g.maladieId,
       count: g._count._all,
     })),
+    new Map(spatialRegions.map((row) => [row.centre_id, row.region_id])),
   );
   const wanted = new Map(candidates.map((a) => [alertKey(a), a]));
   const current = new Map(existing.map((a) => [alertKey(a), a]));

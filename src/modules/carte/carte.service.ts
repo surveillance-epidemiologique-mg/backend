@@ -6,6 +6,7 @@ import {
   TypeZone,
 } from '../../../generated/prisma/client';
 import { TtlCache } from '../../common/cache/ttl-cache';
+import { normalizeRegionName } from '../../common/utils/region-name';
 import { ROLES } from '../../common/constants/roles';
 import type { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../core/prisma/prisma.service';
@@ -44,7 +45,7 @@ export class CarteService {
   private readonly alertesCache = new TtlCache<GeoJsonCollection>(30_000);
   private readonly clustersCache = new TtlCache<GeoJsonCollection>(60_000);
   private readonly regionSummaryCache = new TtlCache<
-    Map<string, { gravite: string; riskLevel: string }>
+    Map<string, { gravite: string; riskLevel: string; regionName: string }>
   >(30_000);
 
   constructor(
@@ -73,6 +74,7 @@ export class CarteService {
       {
         gravite: string;
         riskLevel: string;
+        regionName: string;
       }
     >
   > {
@@ -97,18 +99,22 @@ export class CarteService {
     });
 
     const regionRank = new Map<string, number>();
-    const summary = new Map<string, { gravite: string; riskLevel: string }>();
+    const summary = new Map<
+      string,
+      { gravite: string; riskLevel: string; regionName: string }
+    >();
 
     for (const alerte of alertes) {
       const zone = byId.get(alerte.zoneId);
       if (zone?.type !== TypeZone.Region) continue;
-      const region = zone.name;
+      const region = normalizeRegionName(zone.name);
       const rank = GRAVITE_RANK[alerte.niveauGravite] ?? 0;
       if ((regionRank.get(region) ?? 0) < rank) {
         regionRank.set(region, rank);
         summary.set(region, {
           gravite: alerte.niveauGravite,
           riskLevel: RISK_LEVEL[alerte.niveauGravite] ?? 'Low',
+          regionName: zone.name,
         });
       }
     }
@@ -262,7 +268,10 @@ export class CarteService {
       FROM zones_administratives z
       WHERE z.type_zone = 'Region' AND z.geometrie IS NOT NULL`;
 
-    const alertesByRegion = await this.regionAlertSummary(maladieId, forceRefresh);
+    const alertesByRegion = await this.regionAlertSummary(
+      maladieId,
+      forceRefresh,
+    );
     const features: GeoJsonFeature[] = [];
 
     for (const row of rows) {
@@ -270,7 +279,7 @@ export class CarteService {
       const geom = this.parseGeom(row.geojson);
       if (!geom) continue;
 
-      const alerte = alertesByRegion.get(row.nom_zone);
+      const alerte = alertesByRegion.get(normalizeRegionName(row.nom_zone));
       features.push({
         type: 'Feature',
         geometry: geom,
@@ -525,8 +534,8 @@ export class CarteService {
     maladieId?: number,
   ): Promise<{ region_name: string; risk_level: string }[]> {
     const summary = await this.regionAlertSummary(maladieId);
-    return Array.from(summary.entries()).map(([region_name, alerte]) => ({
-      region_name,
+    return Array.from(summary.values()).map((alerte) => ({
+      region_name: alerte.regionName,
       risk_level: alerte.riskLevel,
     }));
   }
@@ -544,16 +553,50 @@ export class CarteService {
       throw new NotFoundException('Zone introuvable.');
     }
 
+    const matchingRegionIds =
+      zone.type === TypeZone.Region
+        ? (
+            await this.prisma.zoneAdministrative.findMany({
+              where: { type: TypeZone.Region },
+              select: { id: true, name: true },
+            })
+          )
+            .filter(
+              (region) =>
+                normalizeRegionName(region.name) ===
+                normalizeRegionName(zone.name),
+            )
+            .map((region) => region.id)
+        : [zoneId];
+    if (!matchingRegionIds.includes(zoneId)) matchingRegionIds.push(zoneId);
     const descendants = await this.prisma.$queryRaw<{ id_zone: number }[]>`
       WITH RECURSIVE zones AS (
-        SELECT id_zone FROM zones_administratives WHERE id_zone = ${zoneId}
+        SELECT id_zone FROM zones_administratives
+        WHERE id_zone IN (${Prisma.join(matchingRegionIds)})
         UNION
         SELECT z.id_zone FROM zones_administratives z JOIN zones p ON z.id_zone_parent = p.id_zone
       ) SELECT id_zone FROM zones`;
     const zoneIds = descendants.map((z) => z.id_zone);
+    const spatialCentres =
+      zone.type === TypeZone.Region
+        ? await this.prisma.$queryRaw<{ id_centre: number }[]>`
+            SELECT c.id_centre
+            FROM centres_sante c
+            JOIN zones_administratives r ON r.id_zone = ${zoneId}
+            WHERE r.geometrie IS NOT NULL
+              AND ST_Covers(
+                r.geometrie,
+                COALESCE(c.localisation,
+                  ST_SetSRID(ST_MakePoint(c.longitude, c.latitude), 4326))
+              )
+          `
+        : [];
     const centres = await this.prisma.centreSante.findMany({
       where: {
-        zoneId: { in: zoneIds },
+        OR: [
+          { zoneId: { in: zoneIds } },
+          { id: { in: spatialCentres.map((centre) => centre.id_centre) } },
+        ],
       },
       select: { id: true, name: true, type: true },
       orderBy: { name: 'asc' },
@@ -574,7 +617,7 @@ export class CarteService {
 
     const alertes = await this.prisma.alerte.findMany({
       where: {
-        zoneId,
+        zoneId: { in: matchingRegionIds },
         statutAlerte: StatutAlerte.Active,
         centreId: null,
         ...(maladieId !== undefined ? { maladieId } : {}),

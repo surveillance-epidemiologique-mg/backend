@@ -14,10 +14,15 @@ describe('CarteService regional summary', () => {
         findUnique: jest
           .fn()
           .mockResolvedValue({ id: 10, name: 'Région test', type: 'Region' }),
+        findMany: jest.fn().mockResolvedValue([
+          { id: 10, name: 'Région test' },
+          { id: 12, name: 'Region test' },
+        ]),
       },
       $queryRaw: jest
         .fn()
-        .mockResolvedValue([{ id_zone: 10 }, { id_zone: 11 }]),
+        .mockResolvedValueOnce([{ id_zone: 10 }, { id_zone: 11 }])
+        .mockResolvedValueOnce([{ id_centre: 2 }]),
       centreSante: { findMany: findManyCentres },
       casEpidemiologique: { count },
       alerte: { findMany: jest.fn().mockResolvedValue([]) },
@@ -27,7 +32,9 @@ describe('CarteService regional summary', () => {
     const summary = await service.zoneSummary(10, 5);
 
     expect(findManyCentres).toHaveBeenCalledWith({
-      where: { zoneId: { in: [10, 11] } },
+      where: {
+        OR: [{ zoneId: { in: [10, 11] } }, { id: { in: [2] } }],
+      },
       select: { id: true, name: true, type: true },
       orderBy: { name: 'asc' },
     });
@@ -39,6 +46,53 @@ describe('CarteService regional summary', () => {
       centres,
       casTotal: 4,
       casConfirmes: 2,
+    });
+    expect(prisma.alerte.findMany).toHaveBeenCalledWith({
+      where: {
+        zoneId: { in: [10, 12] },
+        statutAlerte: 'Active',
+        centreId: null,
+        maladieId: 5,
+      },
+      select: {
+        niveauGravite: true,
+        detectedCaseCount: true,
+        maladie: { select: { name: true } },
+      },
+    });
+  });
+  it('associe une alerte régionale au polygone ADM1 malgré un nom historique', async () => {
+    const prisma = {
+      zoneAdministrative: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 10,
+            name: 'Matsiatra Ambony',
+            type: 'Region',
+            parentId: null,
+          },
+        ]),
+      },
+      alerte: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ zoneId: 10, niveauGravite: 'Eleve' }]),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([
+        {
+          id_zone: 20,
+          nom_zone: 'Haute Matsiatra',
+          geojson: '{"type":"MultiPolygon","coordinates":[]}',
+        },
+      ]),
+    };
+    const service = new CarteService(prisma as unknown as PrismaService);
+
+    const regions = await service.regionsGeoJson();
+
+    expect(regions.features[0].properties).toMatchObject({
+      nom: 'Haute Matsiatra',
+      gravite: 'Eleve',
     });
   });
 });

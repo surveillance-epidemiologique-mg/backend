@@ -1,3 +1,4 @@
+import { TypeZone } from '../../../generated/prisma/client';
 import {
   buildAlertCandidates,
   computeNiveau,
@@ -78,6 +79,25 @@ describe('Dual-scale alert detection', () => {
       [{ centreId: 1, maladieId: 1, count: 8 }],
     );
     expect(result.find((a) => a.centreId == null)?.detectedCaseCount).toBe(8);
+  });
+  it('attributes production cases to the ADM1 polygon even with a legacy regional link', () => {
+    const result = buildAlertCandidates(
+      [{ id: 1, alertThresholdCentre: 5, alertThresholdRegion: 1 }],
+      [{ id: 1, zoneId: 10 }],
+      [
+        { id: 10, parentId: 100, type: TypeZone.District },
+        { id: 100, parentId: null, type: TypeZone.Region },
+        { id: 200, parentId: null, type: TypeZone.Region },
+      ],
+      [{ centreId: 1, maladieId: 1, count: 2 }],
+      new Map([[1, 200]]),
+    );
+
+    expect(result.map(alertKey).sort()).toEqual(['zone:10:1', 'zone:200:1']);
+    expect(result.find((a) => a.zoneId === 200)).toMatchObject({
+      detectedCaseCount: 2,
+      niveauGravite: 'Eleve',
+    });
   });
   it.each([
     [4, 'Faible'],
