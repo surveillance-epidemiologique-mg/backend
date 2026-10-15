@@ -36,10 +36,7 @@ export class CasController {
   @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Post()
   @ApiOperation({ summary: 'Déclarer un cas suspect ou confirmé' })
-  declare(
-    @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: CreateCaseDto,
-  ) {
+  declare(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateCaseDto) {
     return this.casService.declare(user, dto);
   }
 
@@ -61,7 +58,8 @@ export class CasController {
   @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Get('years')
   @ApiOperation({
-    summary: 'Années disponibles de date_diagnostic (selon la visibilité du rôle)',
+    summary:
+      'Années disponibles de date_diagnostic (selon la visibilité du rôle)',
   })
   years(@CurrentUser() user: AuthenticatedUser) {
     return this.casService.listYears(user);
@@ -87,7 +85,8 @@ export class CasController {
   @Roles(ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Get('laboratoire')
   @ApiOperation({
-    summary: 'Cas du laboratoire (tous, en attente ou traités), filtrés avant pagination',
+    summary:
+      'Cas du laboratoire (tous, en attente ou traités), filtrés avant pagination',
   })
   laboratoire(
     @CurrentUser() user: AuthenticatedUser,
@@ -124,7 +123,7 @@ export class CasController {
   @Post(':id/analyses')
   @ApiOperation({
     summary:
-      "Demander une analyse pour un cas (médecin) ou ajouter une analyse complémentaire (laboratoire)",
+      'Demander une analyse pour un cas (médecin) ou ajouter une analyse complémentaire (laboratoire)',
   })
   requestAnalyse(
     @Param('id', ParseIntPipe) id: number,
@@ -143,7 +142,8 @@ export class CasController {
   @Roles(ROLES.LABORATOIRE, ROLES.ADMINISTRATEUR)
   @Patch('analyses/:analyseId/result')
   @ApiOperation({
-    summary: "Renseigner le résultat d'une analyse (statut global du cas optionnel)",
+    summary:
+      "Renseigner le résultat d'une analyse (statut global du cas optionnel)",
   })
   realizeAnalyse(
     @CurrentUser('id') laboratoryId: number,
@@ -171,8 +171,7 @@ export class CasController {
   @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Get(':id')
   @ApiOperation({
-    summary:
-      'Récupérer un cas par identifiant (Médecin limité à son centre)',
+    summary: 'Récupérer un cas par identifiant (Médecin limité à son centre)',
   })
   findOne(
     @CurrentUser() user: AuthenticatedUser,
@@ -181,14 +180,15 @@ export class CasController {
     return this.casService.findOne(user, id);
   }
 
+  @AllowLaboratoryCaseAccess()
   @Roles(ROLES.MEDECIN, ROLES.ADMINISTRATEUR)
   @Patch(':id/issue')
   @ApiOperation({ summary: "Mettre à jour l'issue clinique" })
   updateIssue(
-    @CurrentUser('id') userId: number,
+    @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateIssueDto,
   ) {
-    return this.casService.updateIssue(userId, id, dto);
+    return this.casService.updateIssue(user, id, dto);
   }
 }
